@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
 import logo from "./assets/CPW_Apple_DeepGold_Large.png";
 
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
@@ -8,10 +9,7 @@ const SUPABASE_URL = "https://sijlcyodgwdovauqcikj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_7b_OXz7BAZN1--StKqOSfg_ElbHo5OA";
 const PROFILE_FILES_BUCKET = "profile-files";
 
-const CREDENTIALS = {
-  cpw: { password: "cpw2026", role: "viewer" },
-  admin: { password: "admin2026", role: "admin" },
-};
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /** Loads pdf.min.js from CDN once; configures worker. */
 let pdfJsLoadPromise = null;
@@ -46,92 +44,60 @@ function ensurePdfJs() {
   return pdfJsLoadPromise;
 }
 
-async function supabaseFetch(path, params = {}) {
-  const url = new URL(`${SUPABASE_URL}/rest/v1/${path}`);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-  });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+async function supabaseFetch(table, params = {}) {
+  let query = supabase.from(table).select(params.select || "*");
+  if (params.order) {
+    const [col, dir] = params.order.split(".");
+    query = query.order(col, { ascending: dir !== "desc" });
+  }
+  if (params.profile_id) {
+    query = query.eq("profile_id", params.profile_id.replace("eq.", ""));
+  }
+  const { data, error } = await query;
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 async function supabasePatch(id, fields) {
-  const path = `${SUPABASE_URL.replace(/\/$/, "")}/rest/v1/profiles`;
-  const url = new URL(path);
-  url.searchParams.set("id", `eq.${id}`);
-  const headers = {
-    apikey: SUPABASE_ANON_KEY,
-    Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    Accept: "application/json",
-    "Content-Type": "application/json",
-    Prefer: "return=minimal",
-  };
-  const body = JSON.stringify(fields);
-  const urlStr = url.toString();
-  console.log("[supabasePatch] request", {
-    url: urlStr,
-    headers: { ...headers },
-    body,
-  });
-  const res = await fetch(urlStr, {
-    method: "PATCH",
-    headers,
-    body,
-  });
-  const responseText = await res.text();
-  console.log("[supabasePatch] response", {
-    status: res.status,
-    ok: res.ok,
-    body: responseText || "(empty)",
-  });
-  if (!res.ok) throw new Error(responseText || `${res.status} ${res.statusText}`);
+  const { error } = await supabase.from("profiles").update(fields).eq("id", id);
+  if (error) throw new Error(error.message);
 }
 
 async function fetchProfilePdfs(profileId) {
-  return supabaseFetch("profile_pdfs", {
-    select: "*",
-    profile_id: `eq.${profileId}`,
-    order: "sort_order.asc,created_at.asc",
-  });
+  const { data, error } = await supabase
+    .from("profile_pdfs")
+    .select("*")
+    .eq("profile_id", profileId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 async function insertProfilePdf(profileId, pdfUrl, label, sortOrder) {
-  const base = SUPABASE_URL.replace(/\/$/, "");
-  const res = await fetch(`${base}/rest/v1/profile_pdfs`, {
-    method: "POST",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    },
-    body: JSON.stringify({
-      profile_id: profileId,
-      pdf_url: pdfUrl,
-      label,
-      sort_order: sortOrder,
-    }),
-  });
-  if (!res.ok) throw new Error(`Insert failed (${res.status})`);
-  const [row] = await res.json();
-  return row;
+  const { data, error } = await supabase
+    .from("profile_pdfs")
+    .insert({ profile_id: profileId, pdf_url: pdfUrl, label, sort_order: sortOrder })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 async function deleteProfilePdf(id) {
-  const base = SUPABASE_URL.replace(/\/$/, "");
-  const res = await fetch(`${base}/rest/v1/profile_pdfs?id=eq.${id}`, {
-    method: "DELETE",
-    headers: {
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-    },
-  });
-  if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+  const { error } = await supabase.from("profile_pdfs").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+async function uploadProfileStorageObject(storagePath, file, contentType) {
+  const { error } = await supabase.storage
+    .from(PROFILE_FILES_BUCKET)
+    .upload(storagePath, file, { upsert: true, contentType });
+  if (error) throw new Error(error.message);
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(PROFILE_FILES_BUCKET).getPublicUrl(storagePath);
+  return publicUrl;
 }
 
 /** Storage object key: scans/{name}.png (slashes in name stripped for safety). */
@@ -1976,24 +1942,11 @@ function DetailScanUpload({ profile, onScanUpdate }) {
     if (!file) return;
     setError(null);
     setUploading(true);
-    const base = SUPABASE_URL.replace(/\/$/, "");
     const objectPath = scanStorageObjectPath(profile.name);
-    const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${objectPath}?upsert=true`;
     const contentType =
       file.type === "image/jpeg" || file.type === "image/jpg" ? "image/jpeg" : "image/png";
     try {
-      const res = await fetch(putUrl, {
-        method: "PUT",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": contentType,
-        },
-        body: file,
-      });
-      const errText = await res.text();
-      if (!res.ok) throw new Error(errText || `Upload failed (${res.status})`);
-      const publicUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${objectPath}`;
+      const publicUrl = await uploadProfileStorageObject(objectPath, file, contentType);
       await supabasePatch(profile.id, { scan_url: publicUrl });
       onScanUpdate({ scan_url: publicUrl });
     } catch (err) {
@@ -2076,22 +2029,10 @@ function DetailFileUpload({ profile, fileType, onUploadComplete }) {
 
     setError(null);
     setUploading(true);
-    const base = SUPABASE_URL.replace(/\/$/, "");
-    const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${storagePath}?upsert=true`;
     const contentType = isPdf ? "application/pdf" : "application/octet-stream";
 
     try {
-      const res = await fetch(putUrl, {
-        method: "PUT",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": contentType,
-        },
-        body: file,
-      });
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-      const publicUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${storagePath}`;
+      const publicUrl = await uploadProfileStorageObject(storagePath, file, contentType);
       await supabasePatch(profile.id, { [dbField]: publicUrl });
       onUploadComplete({ [dbField]: publicUrl });
     } catch (err) {
@@ -2145,22 +2086,10 @@ function PdfSection({ profile, isAdmin, onSetPrimary, onSetActivePdf }) {
     if (!file) return;
     setError(null);
     setUploading(true);
-    const base = SUPABASE_URL.replace(/\/$/, "");
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const storagePath = `pdfs/${profile.id}_${Date.now()}_${safeName}`;
-    const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${storagePath}?upsert=true`;
     try {
-      const res = await fetch(putUrl, {
-        method: "PUT",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/pdf",
-        },
-        body: file,
-      });
-      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
-      const publicUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${storagePath}`;
+      const publicUrl = await uploadProfileStorageObject(storagePath, file, "application/pdf");
       const labelFromFile = file.name.replace(/\.pdf$/i, "");
       const row = await insertProfilePdf(profile.id, publicUrl, labelFromFile, pdfs.length);
       setPdfs((prev) => [...prev, row]);
@@ -2403,21 +2332,20 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
 }
 
 function LoginScreen({ onLogin }) {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(null);
 
-  const handleSubmit = () => {
-    const cred = CREDENTIALS[username.trim().toLowerCase()];
-    if (cred && password === cred.password) {
-      onLogin(username.trim().toLowerCase(), cred.role);
-    } else {
-      setError("Invalid username or password.");
+  const handleSubmit = async () => {
+    try {
+      await onLogin(email.trim(), password);
+    } catch (err) {
+      setError(err.message || "Invalid credentials.");
     }
   };
 
   const onKeyDown = (e) => {
-    if (e.key === "Enter") handleSubmit();
+    if (e.key === "Enter") void handleSubmit();
   };
 
   return (
@@ -2428,14 +2356,14 @@ function LoginScreen({ onLogin }) {
         </div>
         <div className="login-subtitle">Sign in to continue</div>
         <div className="login-field">
-          <label className="login-label">Username</label>
+          <label className="login-label">Email</label>
           <input
             className="login-input"
-            type="text"
-            autoComplete="username"
-            value={username}
+            type="email"
+            autoComplete="email"
+            value={email}
             onChange={(e) => {
-              setUsername(e.target.value);
+              setEmail(e.target.value);
               setError(null);
             }}
             onKeyDown={onKeyDown}
@@ -2494,38 +2422,20 @@ function CreateProfileModal({ onClose, onCreated }) {
       const nextNum = nums.length > 0 ? Math.max(...nums) + 1 : 1;
       const paddedName = String(nextNum).padStart(3, "0");
 
-      const base = SUPABASE_URL.replace(/\/$/, "");
       const pdfPath = `pdfs/${nextNum}.pdf`;
-      const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${pdfPath}?upsert=true`;
-      const uploadRes = await fetch(putUrl, {
-        method: "PUT",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/pdf",
-        },
-        body: pdfFile,
-      });
-      if (!uploadRes.ok) throw new Error(`PDF upload failed (${uploadRes.status})`);
-      const pdfUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${pdfPath}`;
+      const pdfUrl = await uploadProfileStorageObject(pdfPath, pdfFile, "application/pdf");
 
-      const insertRes = await fetch(`${base}/rest/v1/profiles`, {
-        method: "POST",
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({
+      const { data: newProfile, error: insertError } = await supabase
+        .from("profiles")
+        .insert({
           name: paddedName,
           descriptive_name: descName.trim(),
           profile_category: category,
           pdf_url: pdfUrl,
-        }),
-      });
-      if (!insertRes.ok) throw new Error(`Insert failed (${insertRes.status})`);
-      const [newProfile] = await insertRes.json();
+        })
+        .select()
+        .single();
+      if (insertError) throw new Error(insertError.message);
       onCreated(newProfile);
       onClose();
     } catch (err) {
@@ -2608,7 +2518,8 @@ function CreateProfileModal({ onClose, onCreated }) {
 }
 
 export default function App() {
-  const [authRole, setAuthRole] = useState(() => sessionStorage.getItem("cpw_role") || null);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
@@ -2618,18 +2529,28 @@ export default function App() {
   const [thumbSlider, setThumbSlider] = useState(0);
   const thumbSize = Math.round(220 * Math.pow(1200 / 220, thumbSlider / 100));
 
-  const isAdmin = authRole === "admin";
+  const isAdmin = session?.user?.user_metadata?.role === "admin";
 
-  const handleLogin = (user, role) => {
-    sessionStorage.setItem("cpw_role", role);
-    sessionStorage.setItem("cpw_user", user);
-    setAuthRole(role);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      setAuthLoading(false);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = async (email, password) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem("cpw_role");
-    sessionStorage.removeItem("cpw_user");
-    setAuthRole(null);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setProfiles([]);
     setLoading(true);
     setSelected(null);
@@ -2641,14 +2562,11 @@ export default function App() {
 
   const handleDeleteProfile = async (profile) => {
     if (!window.confirm(`Delete profile #${profile.name}? This cannot be undone.`)) return;
-    const base = SUPABASE_URL.replace(/\/$/, "");
-    await fetch(`${base}/rest/v1/profiles?id=eq.${profile.id}`, {
-      method: "DELETE",
-      headers: {
-        apikey: SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-    });
+    const { error } = await supabase.from("profiles").delete().eq("id", profile.id);
+    if (error) {
+      console.error(error);
+      return;
+    }
     setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
     setSelected(null);
   };
@@ -2681,7 +2599,7 @@ export default function App() {
   const selectedProfile = selected ? profiles.find((p) => p.id === selected) : null;
 
   useEffect(() => {
-    if (!authRole) return;
+    if (!session) return;
     setLoading(true);
     supabaseFetch("profiles", { select: "*", order: "name.asc" })
       .then((data) => {
@@ -2692,9 +2610,25 @@ export default function App() {
         console.error(err);
         setLoading(false);
       });
-  }, [authRole]);
+  }, [session]);
 
-  if (!authRole) {
+  if (authLoading) {
+    return (
+      <>
+        <style>{styles}</style>
+        <div className="login-screen">
+          <div className="login-box">
+            <div className="login-logo">
+              CPW <span>PROFILE</span> CATALOG
+            </div>
+            <div className="login-subtitle">Loading…</div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!session) {
     return (
       <>
         <style>{styles}</style>
