@@ -92,6 +92,48 @@ async function supabasePatch(id, fields) {
   if (!res.ok) throw new Error(responseText || `${res.status} ${res.statusText}`);
 }
 
+async function fetchProfilePdfs(profileId) {
+  return supabaseFetch("profile_pdfs", {
+    select: "*",
+    profile_id: `eq.${profileId}`,
+    order: "sort_order.asc,created_at.asc",
+  });
+}
+
+async function insertProfilePdf(profileId, pdfUrl, label, sortOrder) {
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const res = await fetch(`${base}/rest/v1/profile_pdfs`, {
+    method: "POST",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify({
+      profile_id: profileId,
+      pdf_url: pdfUrl,
+      label,
+      sort_order: sortOrder,
+    }),
+  });
+  if (!res.ok) throw new Error(`Insert failed (${res.status})`);
+  const [row] = await res.json();
+  return row;
+}
+
+async function deleteProfilePdf(id) {
+  const base = SUPABASE_URL.replace(/\/$/, "");
+  const res = await fetch(`${base}/rest/v1/profile_pdfs?id=eq.${id}`, {
+    method: "DELETE",
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+    },
+  });
+  if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+}
+
 /** Storage object key: scans/{name}.png (slashes in name stripped for safety). */
 function scanStorageObjectPath(profileName) {
   const safe = String(profileName).replace(/[/\\]+/g, "");
@@ -780,6 +822,7 @@ const styles = `
     min-width: 0;
     min-height: 0;
     overflow-y: auto;
+    max-height: calc(100vh - 56px);
   }
 
   .detail-top-row {
@@ -1224,6 +1267,102 @@ const styles = `
   }
   .file-upload-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
   .file-upload-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .pdf-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px 0;
+  }
+
+  .pdf-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pdf-empty {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .pdf-section-loading {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .pdf-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 8px;
+  }
+
+  .pdf-row-thumb {
+    width: 60px;
+    height: 60px;
+    flex-shrink: 0;
+    cursor: pointer;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pdf-row-thumb canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: contain;
+  }
+
+  .pdf-row-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .pdf-row-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .pdf-row-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .pdf-action-btn {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .pdf-action-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .pdf-action-btn.danger:hover { border-color: #e07070; color: #e07070; }
+
+  .pdf-upload-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
 
   .detail-fields {
     padding: 40px 0 48px 0;
@@ -1930,7 +2069,7 @@ function DetailFileUpload({ profile, fileType, onUploadComplete }) {
     e.target.value = "";
     if (!file) return;
 
-    if (existingUrl) {
+    if (!isPdf && existingUrl) {
       const confirmed = window.confirm(`This profile already has a ${label}. Replace it?`);
       if (!confirmed) return;
     }
@@ -1979,7 +2118,172 @@ function DetailFileUpload({ profile, fileType, onUploadComplete }) {
   );
 }
 
+function PdfSection({ profile, isAdmin, onSetPrimary, onSetActivePdf }) {
+  const [pdfs, setPdfs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetchProfilePdfs(profile.id)
+      .then((data) => {
+        setPdfs(data);
+        setLoading(false);
+      })
+      .catch(() => {
+        setLoading(false);
+      });
+  }, [open, profile.id]);
+
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setError(null);
+    setUploading(true);
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const storagePath = `pdfs/${profile.id}_${Date.now()}_${safeName}`;
+    const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${storagePath}?upsert=true`;
+    try {
+      const res = await fetch(putUrl, {
+        method: "PUT",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/pdf",
+        },
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      const publicUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${storagePath}`;
+      const labelFromFile = file.name.replace(/\.pdf$/i, "");
+      const row = await insertProfilePdf(profile.id, publicUrl, labelFromFile, pdfs.length);
+      setPdfs((prev) => [...prev, row]);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (pdf) => {
+    if (!window.confirm(`Delete "${pdf.label || "this PDF"}"?`)) return;
+    try {
+      await deleteProfilePdf(pdf.id);
+      setPdfs((prev) => prev.filter((p) => p.id !== pdf.id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSetPrimary = async (pdf) => {
+    if (profile.pdf_url) {
+      const alreadySaved = pdfs.some((p) => p.pdf_url === profile.pdf_url);
+      if (!alreadySaved) {
+        try {
+          const urlParts = profile.pdf_url.split("/");
+          const rawFilename = decodeURIComponent(urlParts[urlParts.length - 1] || "");
+          const label = rawFilename
+            ? rawFilename.replace(/\.pdf$/i, "")
+            : "Former Primary PDF";
+
+          const row = await insertProfilePdf(profile.id, profile.pdf_url, label, 0);
+          setPdfs((prev) => [row, ...prev]);
+        } catch (err) {
+          console.error("Failed to migrate existing primary PDF:", err);
+        }
+      }
+    }
+
+    await supabasePatch(profile.id, { pdf_url: pdf.pdf_url });
+    onSetPrimary(pdf.pdf_url);
+  };
+
+  return (
+    <div className="field-group">
+      <div className="group-label group-label-toggle" onClick={() => setOpen((o) => !o)}>
+        PDFs
+        <span className="group-toggle-icon">{open ? "▲" : "▼"}</span>
+      </div>
+      {open && (
+        <div className="pdf-section">
+          {loading ? (
+            <div className="pdf-section-loading">Loading…</div>
+          ) : (
+            <div className="pdf-list">
+              {!profile.pdf_url && pdfs.length === 0 && (
+                <div className="pdf-empty">No PDFs uploaded.</div>
+              )}
+              {profile.pdf_url && (
+                <div className="pdf-row">
+                  <div className="pdf-row-thumb" onClick={() => onSetActivePdf(profile.pdf_url)}>
+                    <PdfThumb pdfUrl={profile.pdf_url} targetPx={120} wrap={false} />
+                  </div>
+                  <div className="pdf-row-info">
+                    <div className="pdf-row-label">Primary PDF</div>
+                    <div className="pdf-row-actions">
+                      <button type="button" className="pdf-action-btn" onClick={() => onSetActivePdf(profile.pdf_url)}>
+                        View
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {pdfs.map((pdf) => (
+                <div key={pdf.id} className="pdf-row">
+                  <div className="pdf-row-thumb" onClick={() => onSetActivePdf(pdf.pdf_url)}>
+                    <PdfThumb pdfUrl={pdf.pdf_url} targetPx={120} wrap={false} />
+                  </div>
+                  <div className="pdf-row-info">
+                    <div className="pdf-row-label">{pdf.label || "Untitled"}</div>
+                    <div className="pdf-row-actions">
+                      <button type="button" className="pdf-action-btn" onClick={() => onSetActivePdf(pdf.pdf_url)}>
+                        View
+                      </button>
+                      {isAdmin && (
+                        <>
+                          <button type="button" className="pdf-action-btn" onClick={() => handleSetPrimary(pdf)}>
+                            Set as Primary
+                          </button>
+                          <button type="button" className="pdf-action-btn danger" onClick={() => handleDelete(pdf)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {isAdmin && (
+            <div className="pdf-upload-row">
+              <input ref={fileRef} type="file" accept="application/pdf" hidden onChange={handleUpload} />
+              <button type="button" className="file-upload-btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                {uploading ? "Uploading…" : "↑ Upload PDF"}
+              </button>
+              {error && <div className="file-upload-error">{error}</div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
+  const [activePdfUrl, setActivePdfUrl] = useState(profile.pdf_url);
+
+  useEffect(() => {
+    setActivePdfUrl(profile.pdf_url);
+  }, [profile.id, profile.pdf_url]);
+
   return (
     <div className="detail-page">
       <div className="detail-topbar">
@@ -1992,8 +2296,8 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
       </div>
       <div className="detail-hero">
         <div className="detail-pdf-col">
-          {profile.pdf_url ? (
-            <PdfThumb pdfUrl={profile.pdf_url} className="detail-pdf-thumb" targetPx={900} fitContainer />
+          {activePdfUrl ? (
+            <PdfThumb pdfUrl={activePdfUrl} className="detail-pdf-thumb" targetPx={900} fitContainer />
           ) : (
             <div className="detail-pdf-placeholder">No PDF</div>
           )}
@@ -2082,6 +2386,15 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
                 isAdmin={isAdmin}
               />
             ))}
+            <PdfSection
+              profile={profile}
+              isAdmin={isAdmin}
+              onSetActivePdf={setActivePdfUrl}
+              onSetPrimary={(url) => {
+                onProfileUpdate(profile.id, { pdf_url: url });
+                setActivePdfUrl(url);
+              }}
+            />
           </div>
         </div>
       </div>
