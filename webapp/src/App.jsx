@@ -7,6 +7,11 @@ const SUPABASE_URL = "https://sijlcyodgwdovauqcikj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_7b_OXz7BAZN1--StKqOSfg_ElbHo5OA";
 const PROFILE_FILES_BUCKET = "profile-files";
 
+const CREDENTIALS = {
+  cpw: { password: "cpw2026", role: "viewer" },
+  admin: { password: "admin2026", role: "admin" },
+};
+
 /** Loads pdf.min.js from CDN once; configures worker. */
 let pdfJsLoadPromise = null;
 function ensurePdfJs() {
@@ -264,6 +269,99 @@ const styles = `
     white-space: nowrap;
     margin-left: auto;
   }
+
+  .nav-logout {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: rgba(255,255,255,0.5);
+    border-radius: var(--radius);
+    padding: 5px 10px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: border-color 0.12s, color 0.12s;
+  }
+  .nav-logout:hover { border-color: var(--accent); color: var(--accent); }
+
+  .login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+  }
+  .login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 48px 40px;
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .login-logo {
+    font-family: var(--display);
+    font-size: 20px;
+    color: var(--text);
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+  .login-logo span { color: var(--accent); }
+  .login-subtitle {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: -12px;
+  }
+  .login-field { display: flex; flex-direction: column; gap: 6px; }
+  .login-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .login-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .login-input:focus { border-color: var(--accent); }
+  .login-error {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #e07070;
+    letter-spacing: 0.04em;
+  }
+  .login-btn {
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 12px;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: opacity 0.15s;
+  }
+  .login-btn:hover { opacity: 0.88; }
 
   .filter-bar {
     width: 100%;
@@ -592,6 +690,10 @@ const styles = `
     padding: 8px;
     cursor: pointer;
   }
+  .detail-scan-small-placeholder:not([role="button"]) {
+    cursor: default;
+    pointer-events: none;
+  }
 
   .detail-scan-small-placeholder.has-error {
     color: #c44;
@@ -744,6 +846,15 @@ const styles = `
 
   .field-value { font-family: var(--mono); font-size: 11px; color: var(--text); }
   .field-value.empty { color: var(--border); }
+
+  .field-value-readonly {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text);
+    min-height: 1.25em;
+    word-break: break-word;
+  }
+  .field-value-readonly.empty { color: var(--border); font-style: italic; }
 
   .field-value-editable {
     font-family: var(--mono);
@@ -979,7 +1090,7 @@ function valuesMatchForPatch(type, prev, next) {
   return a === b;
 }
 
-function EditableField({ value, fieldKey, profileId, type, options = [], unit = "", onUpdate }) {
+function EditableField({ value, fieldKey, profileId, type, options = [], unit = "", onUpdate, isAdmin }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const controlRef = useRef(null);
@@ -1076,6 +1187,14 @@ function EditableField({ value, fieldKey, profileId, type, options = [], unit = 
     );
   }
 
+  if (!isAdmin) {
+    return (
+      <div className={`field-value-readonly${empty ? " empty" : ""}`}>
+        {displayText()}
+      </div>
+    );
+  }
+
   return (
     <div
       className={`field-value-editable${empty ? " empty" : ""}`}
@@ -1094,7 +1213,7 @@ function EditableField({ value, fieldKey, profileId, type, options = [], unit = 
   );
 }
 
-function FieldGroup({ group, profile, onFieldUpdate }) {
+function FieldGroup({ group, profile, onFieldUpdate, isAdmin }) {
   return (
     <div className="field-group">
       <div className="group-label">{group.label}</div>
@@ -1124,6 +1243,7 @@ function FieldGroup({ group, profile, onFieldUpdate }) {
                 options={options}
                 unit={f.unit || ""}
                 onUpdate={onFieldUpdate}
+                isAdmin={isAdmin}
               />
             </div>
           );
@@ -1231,7 +1351,7 @@ function DetailScanUpload({ profile, onScanUpdate }) {
   );
 }
 
-function DetailPage({ profile, onBack, onProfileUpdate }) {
+function DetailPage({ profile, onBack, onProfileUpdate, isAdmin }) {
   return (
     <div className="detail-page">
       <div className="detail-back" onClick={onBack}>← Back to catalog</div>
@@ -1251,10 +1371,16 @@ function DetailPage({ profile, onBack, onProfileUpdate }) {
             </div>
             <div className="detail-top-aside">
               <div className="detail-scan-col">
-                <DetailScanUpload
-                  profile={profile}
-                  onScanUpdate={(patch) => onProfileUpdate(profile.id, patch)}
-                />
+                {isAdmin ? (
+                  <DetailScanUpload
+                    profile={profile}
+                    onScanUpdate={(patch) => onProfileUpdate(profile.id, patch)}
+                  />
+                ) : profile.scan_url ? (
+                  <img className="detail-scan-small" src={profile.scan_url} alt={profile.name} />
+                ) : (
+                  <div className="detail-scan-small-placeholder">No Scan</div>
+                )}
               </div>
               <div className="detail-badge-row">
                 {profile.profile_category && <span className="detail-badge db-category">{profile.profile_category}</span>}
@@ -1279,6 +1405,7 @@ function DetailPage({ profile, onBack, onProfileUpdate }) {
                 group={g}
                 profile={profile}
                 onFieldUpdate={(patch) => onProfileUpdate(profile.id, patch)}
+                isAdmin={isAdmin}
               />
             ))}
           </div>
@@ -1288,17 +1415,100 @@ function DetailPage({ profile, onBack, onProfileUpdate }) {
   );
 }
 
+function LoginScreen({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(null);
+
+  const handleSubmit = () => {
+    const cred = CREDENTIALS[username.trim().toLowerCase()];
+    if (cred && password === cred.password) {
+      onLogin(username.trim().toLowerCase(), cred.role);
+    } else {
+      setError("Invalid username or password.");
+    }
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter") handleSubmit();
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-box">
+        <div className="login-logo">
+          CPW <span>PROFILE</span> CATALOG
+        </div>
+        <div className="login-subtitle">Sign in to continue</div>
+        <div className="login-field">
+          <label className="login-label">Username</label>
+          <input
+            className="login-input"
+            type="text"
+            autoComplete="username"
+            value={username}
+            onChange={(e) => {
+              setUsername(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={onKeyDown}
+          />
+        </div>
+        <div className="login-field">
+          <label className="login-label">Password</label>
+          <input
+            className="login-input"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setError(null);
+            }}
+            onKeyDown={onKeyDown}
+          />
+        </div>
+        {error && <div className="login-error">{error}</div>}
+        <button className="login-btn" type="button" onClick={handleSubmit}>
+          Sign In
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [authRole, setAuthRole] = useState(() => sessionStorage.getItem("cpw_role") || null);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
 
-  useEffect(() => {
-    supabaseFetch("profiles", { select: "*", order: "name.asc" })
-      .then((data) => { setProfiles(data); setLoading(false); })
-      .catch((err) => { console.error(err); setLoading(false); });
+  const isAdmin = authRole === "admin";
+
+  const handleLogin = (user, role) => {
+    sessionStorage.setItem("cpw_role", role);
+    sessionStorage.setItem("cpw_user", user);
+    setAuthRole(role);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem("cpw_role");
+    sessionStorage.removeItem("cpw_user");
+    setAuthRole(null);
+    setProfiles([]);
+    setLoading(true);
+    setSelected(null);
+  };
+
+  const handleBack = useCallback(() => {
+    setSelected(null);
+    window.scrollTo(0, 0);
+  }, []);
+
+  const handleProfileUpdate = useCallback((profileId, patch) => {
+    setProfiles((prev) => prev.map((p) => (p.id === profileId ? { ...p, ...patch } : p)));
   }, []);
 
   const filtered = useMemo(() => {
@@ -1312,18 +1522,35 @@ export default function App() {
     });
   }, [profiles, search, categoryFilter]);
 
-  const selectedProfile = selected ? profiles.find((p) => p.id === selected) : null;
-
-  const handleBack = useCallback(() => { setSelected(null); window.scrollTo(0, 0); }, []);
-
-  const handleProfileUpdate = useCallback((profileId, patch) => {
-    setProfiles((prev) => prev.map((p) => (p.id === profileId ? { ...p, ...patch } : p)));
-  }, []);
-
   const activeCategories = useMemo(() => {
     const cats = new Set(profiles.map((p) => p.profile_category).filter(Boolean));
     return CATEGORIES.filter((c) => cats.has(c));
   }, [profiles]);
+
+  const selectedProfile = selected ? profiles.find((p) => p.id === selected) : null;
+
+  useEffect(() => {
+    if (!authRole) return;
+    setLoading(true);
+    supabaseFetch("profiles", { select: "*", order: "name.asc" })
+      .then((data) => {
+        setProfiles(data);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, [authRole]);
+
+  if (!authRole) {
+    return (
+      <>
+        <style>{styles}</style>
+        <LoginScreen onLogin={handleLogin} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -1339,10 +1566,18 @@ export default function App() {
         <div className="nav-count">
           {selectedProfile ? `#${selectedProfile.name}` : `${filtered.length} profiles`}
         </div>
+        <button className="nav-logout" type="button" onClick={handleLogout} title="Sign out">
+          ↩ Sign Out
+        </button>
       </nav>
 
       {selectedProfile ? (
-        <DetailPage profile={selectedProfile} onBack={handleBack} onProfileUpdate={handleProfileUpdate} />
+        <DetailPage
+          profile={selectedProfile}
+          onBack={handleBack}
+          onProfileUpdate={handleProfileUpdate}
+          isAdmin={isAdmin}
+        />
       ) : (
         <>
           <div className="filter-bar">
