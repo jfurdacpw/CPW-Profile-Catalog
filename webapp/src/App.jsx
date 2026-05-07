@@ -49,6 +49,7 @@ async function supabaseFetch(path, params = {}) {
   const url = new URL(`${SUPABASE_URL}/rest/v1/${path}`);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url, {
+    cache: "no-store",
     headers: {
       apikey: SUPABASE_ANON_KEY,
       Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
@@ -97,11 +98,23 @@ function scanStorageObjectPath(profileName) {
 }
 
 const CATEGORIES = [
-  "Trim", "Baseboard", "Panel Molding", "Cove Molding", "Edge Profile",
-  "Miscellaneous", "Casing", "Cope and Stick", "Wainscoting",
-  "Jointery", "Hand Rail", "Chair Rail",
-  "Crown Molding", "Bullnose", "Picture Moulding", "door casing",
-  "groove/tounge", "cove molding", "trim", "hand rail", "Miscelaneous",
+  "Trim",
+  "Baseboard",
+  "Panel Molding",
+  "Cove Molding",
+  "Edge Profile",
+  "Miscellaneous",
+  "Casing",
+  "Door Casing",
+  "Cope and Stick",
+  "Wainscoting",
+  "Jointery",
+  "Groove/Tounge",
+  "Hand Rail",
+  "Chair Rail",
+  "Crown Molding",
+  "Bullnose",
+  "Picture Moulding",
 ];
 
 const TOOL_TYPES = ["Profile Knife", "Router Bit"];
@@ -236,10 +249,10 @@ const styles = `
 
   .nav-search input {
     width: 100%;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: var(--radius);
-    color: #fff;
+    color: var(--bg);
     font-family: var(--mono);
     font-size: 12px;
     padding: 8px 12px 8px 36px;
@@ -249,22 +262,22 @@ const styles = `
 
   .nav-search input:focus {
     border-color: var(--accent);
-    background: rgba(255,255,255,0.12);
+    background: rgba(0, 0, 0, 0.04);
   }
 
-  .nav-search input::placeholder { color: rgba(255,255,255,0.35); }
+  .nav-search input::placeholder { color: rgba(0, 0, 0, 0.38); }
 
   .nav-search-icon {
     position: absolute; left: 11px; top: 50%;
     transform: translateY(-50%);
-    color: rgba(255,255,255,0.4);
+    color: rgba(0, 0, 0, 0.45);
     font-size: 13px; pointer-events: none;
   }
 
   .nav-count {
     font-family: var(--mono);
     font-size: 11px;
-    color: rgba(255,255,255,0.4);
+    color: rgba(0, 0, 0, 0.55);
     letter-spacing: 0.06em;
     white-space: nowrap;
     margin-left: auto;
@@ -275,8 +288,8 @@ const styles = `
     font-size: 10px;
     letter-spacing: 0.06em;
     background: transparent;
-    border: 1px solid rgba(255,255,255,0.2);
-    color: rgba(255,255,255,0.5);
+    border: 1px solid rgba(0, 0, 0, 0.22);
+    color: var(--bg);
     border-radius: var(--radius);
     padding: 5px 10px;
     cursor: pointer;
@@ -285,6 +298,77 @@ const styles = `
     transition: border-color 0.12s, color 0.12s;
   }
   .nav-logout:hover { border-color: var(--accent); color: var(--accent); }
+
+  .nav-add-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: var(--bg);
+    padding: 5px 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+    transition: opacity 0.15s;
+  }
+  .nav-add-btn:hover { opacity: 0.85; }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 36px 32px;
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .modal-title {
+    font-family: var(--display);
+    font-size: 18px;
+    color: var(--text);
+  }
+  .modal-field { display: flex; flex-direction: column; gap: 6px; }
+  .modal-file-row { display: flex; align-items: center; gap: 10px; }
+  .modal-file-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .modal-file-btn:hover { border-color: var(--accent); }
+  .modal-file-name { font-family: var(--mono); font-size: 11px; color: var(--accent2); }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
+  .modal-cancel-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .modal-cancel-btn:hover { border-color: var(--text); color: var(--text); }
+  .modal-submit-btn { width: auto; margin-top: 0; }
 
   .login-screen {
     min-height: 100vh;
@@ -537,6 +621,37 @@ const styles = `
   }
 
   .detail-back:hover { color: var(--accent); }
+
+  .detail-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    width: 100%;
+    flex-shrink: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+  }
+  .detail-topbar .detail-back {
+    border-bottom: none;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .detail-delete-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: transparent;
+    border: 1px solid #7a3030;
+    border-radius: var(--radius);
+    color: #c07070;
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .detail-delete-btn:hover { background: #7a3030; color: #fff; }
 
   .detail-hero {
     flex: 1;
@@ -825,6 +940,20 @@ const styles = `
     padding-bottom: 4px;
     border-bottom: 2px solid var(--text);
     text-transform: uppercase;
+  }
+  .group-label-toggle {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+  }
+  .group-label-toggle:hover { color: var(--accent); }
+
+  .group-toggle-icon {
+    font-size: 8px;
+    color: var(--muted);
+    margin-left: 8px;
   }
 
   .fields-grid {
@@ -1214,41 +1343,48 @@ function EditableField({ value, fieldKey, profileId, type, options = [], unit = 
 }
 
 function FieldGroup({ group, profile, onFieldUpdate, isAdmin }) {
+  const [open, setOpen] = useState(false);
+
   return (
     <div className="field-group">
-      <div className="group-label">{group.label}</div>
-      <div className="fields-grid">
-        {group.fields.map((f) => {
-          const val = profile[f.key];
-          let type = NUMERIC_FIELDS.has(f.key) ? "number" : "text";
-          let options = [];
-          if (f.key === "profile_category") {
-            type = "select";
-            options = CATEGORIES;
-          } else if (f.key === "tool_type") {
-            type = "select";
-            options = TOOL_TYPES;
-          } else if (f.key === "level_of_detail") {
-            type = "select";
-            options = LOD;
-          }
-          return (
-            <div key={f.key} className={`field-item${f.wide ? " wide" : ""}`}>
-              <div className="field-label">{f.label}</div>
-              <EditableField
-                value={val}
-                fieldKey={f.key}
-                profileId={profile.id}
-                type={type}
-                options={options}
-                unit={f.unit || ""}
-                onUpdate={onFieldUpdate}
-                isAdmin={isAdmin}
-              />
-            </div>
-          );
-        })}
+      <div className="group-label group-label-toggle" onClick={() => setOpen((o) => !o)}>
+        {group.label}
+        <span className="group-toggle-icon">{open ? "▲" : "▼"}</span>
       </div>
+      {open && (
+        <div className="fields-grid">
+          {group.fields.map((f) => {
+            const val = profile[f.key];
+            let type = NUMERIC_FIELDS.has(f.key) ? "number" : "text";
+            let options = [];
+            if (f.key === "profile_category") {
+              type = "select";
+              options = CATEGORIES;
+            } else if (f.key === "tool_type") {
+              type = "select";
+              options = TOOL_TYPES;
+            } else if (f.key === "level_of_detail") {
+              type = "select";
+              options = LOD;
+            }
+            return (
+              <div key={f.key} className={`field-item${f.wide ? " wide" : ""}`}>
+                <div className="field-label">{f.label}</div>
+                <EditableField
+                  value={val}
+                  fieldKey={f.key}
+                  profileId={profile.id}
+                  type={type}
+                  options={options}
+                  unit={f.unit || ""}
+                  onUpdate={onFieldUpdate}
+                  isAdmin={isAdmin}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1351,10 +1487,17 @@ function DetailScanUpload({ profile, onScanUpdate }) {
   );
 }
 
-function DetailPage({ profile, onBack, onProfileUpdate, isAdmin }) {
+function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
   return (
     <div className="detail-page">
-      <div className="detail-back" onClick={onBack}>← Back to catalog</div>
+      <div className="detail-topbar">
+        <div className="detail-back" onClick={onBack}>← Back to catalog</div>
+        {isAdmin && (
+          <button type="button" className="detail-delete-btn" onClick={() => onDelete(profile)}>
+            Delete Profile
+          </button>
+        )}
+      </div>
       <div className="detail-hero">
         <div className="detail-pdf-col">
           {profile.pdf_url ? (
@@ -1477,6 +1620,149 @@ function LoginScreen({ onLogin }) {
   );
 }
 
+function CreateProfileModal({ onClose, onCreated }) {
+  const [category, setCategory] = useState("");
+  const [descName, setDescName] = useState("");
+  const [pdfFile, setPdfFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+
+  const handleSubmit = async () => {
+    if (!category) {
+      setError("Category is required.");
+      return;
+    }
+    if (!descName.trim()) {
+      setError("Name is required.");
+      return;
+    }
+    if (!pdfFile) {
+      setError("PDF is required.");
+      return;
+    }
+    setError(null);
+    setUploading(true);
+
+    try {
+      const existing = await supabaseFetch("profiles", { select: "name", order: "name.asc" });
+      const nums = existing.map((p) => parseInt(p.name, 10)).filter((n) => !isNaN(n));
+      const nextNum = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+      const paddedName = String(nextNum).padStart(3, "0");
+
+      const base = SUPABASE_URL.replace(/\/$/, "");
+      const pdfPath = `pdfs/${nextNum}.pdf`;
+      const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${pdfPath}?upsert=true`;
+      const uploadRes = await fetch(putUrl, {
+        method: "PUT",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/pdf",
+        },
+        body: pdfFile,
+      });
+      if (!uploadRes.ok) throw new Error(`PDF upload failed (${uploadRes.status})`);
+      const pdfUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${pdfPath}`;
+
+      const insertRes = await fetch(`${base}/rest/v1/profiles`, {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          name: paddedName,
+          descriptive_name: descName.trim(),
+          profile_category: category,
+          pdf_url: pdfUrl,
+        }),
+      });
+      if (!insertRes.ok) throw new Error(`Insert failed (${insertRes.status})`);
+      const [newProfile] = await insertRes.json();
+      onCreated(newProfile);
+      onClose();
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Add New Profile</div>
+
+        <div className="modal-field">
+          <label className="login-label">Category *</label>
+          <select
+            className="field-select"
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setError(null);
+            }}
+          >
+            <option value="">— Select —</option>
+            {CATEGORIES.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="modal-field">
+          <label className="login-label">Name *</label>
+          <input
+            className="login-input"
+            type="text"
+            placeholder="e.g. Small Cove Molding"
+            value={descName}
+            onChange={(e) => {
+              setDescName(e.target.value);
+              setError(null);
+            }}
+          />
+        </div>
+
+        <div className="modal-field">
+          <label className="login-label">PDF *</label>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf"
+            hidden
+            onChange={(e) => {
+              setPdfFile(e.target.files?.[0] || null);
+              setError(null);
+            }}
+          />
+          <div className="modal-file-row">
+            <button type="button" className="modal-file-btn" onClick={() => fileRef.current?.click()}>
+              {pdfFile ? pdfFile.name : "Choose PDF…"}
+            </button>
+            {pdfFile && <span className="modal-file-name">✓</span>}
+          </div>
+        </div>
+
+        {error && <div className="login-error">{error}</div>}
+
+        <div className="modal-actions">
+          <button type="button" className="modal-cancel-btn" onClick={onClose} disabled={uploading}>
+            Cancel
+          </button>
+          <button type="button" className="login-btn modal-submit-btn" onClick={handleSubmit} disabled={uploading}>
+            {uploading ? "Creating…" : "Create Profile"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [authRole, setAuthRole] = useState(() => sessionStorage.getItem("cpw_role") || null);
   const [profiles, setProfiles] = useState([]);
@@ -1484,6 +1770,7 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const isAdmin = authRole === "admin";
 
@@ -1499,6 +1786,24 @@ export default function App() {
     setAuthRole(null);
     setProfiles([]);
     setLoading(true);
+    setSelected(null);
+  };
+
+  const handleProfileCreated = (newProfile) => {
+    setProfiles((prev) => [...prev, newProfile].sort((a, b) => a.name.localeCompare(b.name)));
+  };
+
+  const handleDeleteProfile = async (profile) => {
+    if (!window.confirm(`Delete profile #${profile.name}? This cannot be undone.`)) return;
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    await fetch(`${base}/rest/v1/profiles?id=eq.${profile.id}`, {
+      method: "DELETE",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+    });
+    setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
     setSelected(null);
   };
 
@@ -1566,6 +1871,11 @@ export default function App() {
         <div className="nav-count">
           {selectedProfile ? `#${selectedProfile.name}` : `${filtered.length} profiles`}
         </div>
+        {isAdmin && !selectedProfile && (
+          <button type="button" className="nav-add-btn" onClick={() => setShowCreateModal(true)}>
+            + Add Profile
+          </button>
+        )}
         <button className="nav-logout" type="button" onClick={handleLogout} title="Sign out">
           ↩ Sign Out
         </button>
@@ -1577,6 +1887,7 @@ export default function App() {
           onBack={handleBack}
           onProfileUpdate={handleProfileUpdate}
           isAdmin={isAdmin}
+          onDelete={handleDeleteProfile}
         />
       ) : (
         <>
@@ -1607,6 +1918,12 @@ export default function App() {
             )}
           </div>
         </>
+      )}
+      {showCreateModal && (
+        <CreateProfileModal
+          onClose={() => setShowCreateModal(false)}
+          onCreated={handleProfileCreated}
+        />
       )}
     </>
   );
