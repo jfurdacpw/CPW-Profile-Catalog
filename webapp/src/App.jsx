@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import logo from "./assets/CPW_Apple_DeepGold_Large.png";
 
 const PDFJS_URL = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
 const PDFJS_WORKER = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -120,6 +121,31 @@ const CATEGORIES = [
 const TOOL_TYPES = ["Profile Knife", "Router Bit"];
 const LOD = ["Simple", "Moderate", "Complex"];
 
+const TAGS = {
+  "Shape / Profile": [
+    "bead", "ogee", "cove", "bullnose", "ovolo", "astragal", "chamfer",
+    "concave", "convex", "flute", "reed", "thumbnail", "roundover",
+  ],
+  Construction: [
+    "cope", "stick", "tongue", "groove", "rabbet", "bevel", "fillet",
+    "reveal", "half lap", "ship lap",
+  ],
+  "Location / Application": [
+    "baseboard", "casing", "chair rail", "crown", "base cap", "back band",
+    "panel molding", "picture frame", "wainscoting", "handrail", "stair rail",
+    "sill", "apron", "plinth", "pilaster",
+  ],
+  Geometry: [
+    "quarter round", "half round", "full round", "symmetrical", "raised",
+    "stepped", "multi", "repeat", "tambour",
+  ],
+  Size: ["small", "medium", "large"],
+  Other: [
+    "custom", "traditional", "shaker", "door", "window", "edge", "trim",
+    "rework", "outsourced",
+  ],
+};
+
 const FIELD_GROUPS = [
   {
     label: "Profile Info",
@@ -131,8 +157,6 @@ const FIELD_GROUPS = [
       { key: "location_in_cnc", label: "Location in CNC" },
       { key: "location_zone", label: "Zone" },
       { key: "location_zone_other", label: "Zone Other" },
-      { key: "tag", label: "Tag" },
-      { key: "usage_notes", label: "Usage Notes" },
       { key: "martin_sled", label: "Martin Sled" },
     ],
   },
@@ -238,9 +262,18 @@ const styles = `
     white-space: nowrap;
     cursor: pointer;
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
 
   .nav-logo span { color: var(--accent); }
+
+  .nav-logo-img {
+    height: 36px;
+    width: auto;
+    display: block;
+  }
 
   .nav-search {
     flex: 1;
@@ -272,6 +305,49 @@ const styles = `
     transform: translateY(-50%);
     color: rgba(0, 0, 0, 0.45);
     font-size: 13px; pointer-events: none;
+  }
+
+  .nav-slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .nav-slider-icon {
+    font-size: 10px;
+    color: rgba(0, 0, 0, 0.35);
+    line-height: 1;
+  }
+
+  .nav-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 80px;
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.2);
+    outline: none;
+    cursor: pointer;
+  }
+
+  .nav-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+  }
+
+  .nav-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: none;
   }
 
   .nav-count {
@@ -489,7 +565,6 @@ const styles = `
   .grid {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     gap: 20px;
   }
 
@@ -528,13 +603,13 @@ const styles = `
 
   .card-pdf-thumb {
     width: 100%;
-    aspect-ratio: 1;
-    background: var(--surface2);
-    position: relative;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    background: #fff;
+    position: relative;
   }
 
   .card-pdf-thumb .card-pdf-placeholder {
@@ -546,11 +621,8 @@ const styles = `
   }
 
   .card-pdf-thumb canvas {
-    display: block;
-    position: relative;
-    z-index: 0;
-    max-width: 100%;
-    max-height: 100%;
+    width: 100% !important;
+    height: 100% !important;
     object-fit: contain;
   }
 
@@ -867,6 +939,179 @@ const styles = `
     margin-bottom: 12px;
     letter-spacing: 0.02em;
   }
+
+  .detail-usage-notes-wrap {
+    margin-top: 8px;
+  }
+
+  .detail-usage-notes-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .detail-usage-notes-wrap .field-value-editable,
+  .detail-usage-notes-wrap .field-value-readonly {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .detail-usage-notes-wrap .field-value-editable.empty,
+  .detail-usage-notes-wrap .field-value-readonly.empty {
+    font-style: italic;
+    color: var(--border);
+  }
+
+  .detail-tags-wrap {
+    margin-top: 12px;
+    text-align: center;
+  }
+
+  .tag-editor {
+    position: relative;
+  }
+
+  .tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tag-chip {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--text);
+    padding: 3px 8px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tag-chip-remove {
+    background: none;
+    border: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0;
+    display: flex;
+    align-items: center;
+  }
+  .tag-chip-remove:hover { color: #e07070; }
+
+  .tag-add-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 2px;
+    color: var(--muted);
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .tag-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .tag-picker {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 50;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px;
+    width: 380px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .tag-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    max-height: 180px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+  }
+
+  .tag-picker-category {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .tag-picker-cat-label {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+
+  .tag-picker-cat-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .tag-picker-option {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    color: var(--muted);
+    padding: 3px 8px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .tag-picker-option:hover { border-color: var(--accent); color: var(--accent); }
+
+  .tag-picker-custom {
+    display: flex;
+    gap: 6px;
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+  }
+
+  .tag-picker-input {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 11px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    padding: 5px 8px;
+    outline: none;
+  }
+  .tag-picker-input:focus { border-color: var(--accent); }
+
+  .tag-picker-add {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--accent);
+    border: none;
+    border-radius: var(--radius);
+    color: #fff;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  .tag-picker-add:hover { opacity: 0.85; }
 
   .detail-desc {
     font-size: 15px;
@@ -1198,7 +1443,7 @@ function PdfThumb({ pdfUrl, wrap = true, targetPx = 220, className = "card-pdf-t
   return inner;
 }
 
-function LazyPdfThumb({ pdfUrl }) {
+function LazyPdfThumb({ pdfUrl, thumbSize }) {
   const wrapRef = useRef(null);
   const [inView, setInView] = useState(false);
 
@@ -1226,17 +1471,17 @@ function LazyPdfThumb({ pdfUrl }) {
           ⌗
         </div>
       ) : (
-        <PdfThumb pdfUrl={pdfUrl} wrap={false} />
+        <PdfThumb pdfUrl={pdfUrl} wrap={false} targetPx={thumbSize * 2} />
       )}
     </div>
   );
 }
 
-function ProfileCard({ profile, onClick }) {
+function ProfileCard({ profile, onClick, thumbSize }) {
   return (
     <div className="card" onClick={onClick}>
       {profile.pdf_url ? (
-        <LazyPdfThumb pdfUrl={profile.pdf_url} />
+        <LazyPdfThumb pdfUrl={profile.pdf_url} thumbSize={thumbSize} />
       ) : profile.scan_url ? (
         <img className="card-img" src={profile.scan_url} alt={profile.name} loading="lazy" />
       ) : (
@@ -1395,6 +1640,128 @@ function EditableField({ value, fieldKey, profileId, type, options = [], unit = 
       }}
     >
       {displayText()}
+    </div>
+  );
+}
+
+function TagEditor({ value, profileId, isAdmin, onUpdate }) {
+  const parseTags = (raw) =>
+    (raw || "").split("\n").map((t) => t.trim()).filter(Boolean);
+
+  const [tags, setTags] = useState(() => parseTags(value));
+  const [showPicker, setShowPicker] = useState(false);
+  const [customInput, setCustomInput] = useState("");
+  const pickerRef = useRef(null);
+
+  useEffect(() => {
+    setTags(parseTags(value));
+  }, [value]);
+
+  useEffect(() => {
+    if (!showPicker) return;
+    const handler = (e) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target)) {
+        setShowPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showPicker]);
+
+  const save = async (newTags) => {
+    const raw = newTags.join("\n") || null;
+    try {
+      await supabasePatch(profileId, { tag: raw });
+      onUpdate({ tag: raw });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const removeTag = (tag) => {
+    const next = tags.filter((t) => t !== tag);
+    setTags(next);
+    save(next);
+  };
+
+  const addTag = (tag) => {
+    const trimmed = tag.trim();
+    if (!trimmed || tags.includes(trimmed)) return;
+    const next = [...tags, trimmed];
+    setTags(next);
+    save(next);
+  };
+
+  const handleCustomAdd = () => {
+    addTag(customInput);
+    setCustomInput("");
+  };
+
+  const availableTags = Object.fromEntries(
+    Object.entries(TAGS).map(([cat, items]) => [cat, items.filter((t) => !tags.includes(t))])
+  );
+
+  return (
+    <div className="tag-editor">
+      <div className="tag-chips">
+        {tags.map((tag) => (
+          <span key={tag} className="tag-chip">
+            {tag}
+            {isAdmin && (
+              <button type="button" className="tag-chip-remove" onClick={() => removeTag(tag)} aria-label={`Remove ${tag}`}>
+                ×
+              </button>
+            )}
+          </span>
+        ))}
+        {isAdmin && (
+          <button type="button" className="tag-add-btn" onClick={() => setShowPicker((v) => !v)}>
+            + Add
+          </button>
+        )}
+      </div>
+
+      {isAdmin && showPicker && (
+        <div className="tag-picker" ref={pickerRef}>
+          <div className="tag-picker-list">
+            {Object.entries(availableTags).map(([cat, items]) =>
+              items.length === 0 ? null : (
+                <div key={cat} className="tag-picker-category">
+                  <div className="tag-picker-cat-label">{cat}</div>
+                  <div className="tag-picker-cat-items">
+                    {items.map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        className="tag-picker-option"
+                        onClick={() => {
+                          addTag(tag);
+                        }}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+          <div className="tag-picker-custom">
+            <input
+              className="tag-picker-input"
+              placeholder="Custom tag…"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCustomAdd();
+              }}
+            />
+            <button type="button" className="tag-picker-add" onClick={handleCustomAdd}>
+              Add
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1636,6 +2003,28 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
             <div className="detail-top-titles">
               <div className="detail-num">Profile #{profile.name}</div>
               <div className="detail-name">{profile.descriptive_name || profile.name}</div>
+              <div className="detail-usage-notes-wrap">
+                <div className="detail-usage-notes-label">Usage Notes</div>
+                <EditableField
+                  value={profile.usage_notes}
+                  fieldKey="usage_notes"
+                  profileId={profile.id}
+                  type="text"
+                  unit=""
+                  options={[]}
+                  onUpdate={(patch) => onProfileUpdate(profile.id, patch)}
+                  isAdmin={isAdmin}
+                />
+              </div>
+              <div className="detail-tags-wrap">
+                <div className="detail-usage-notes-label">Tags</div>
+                <TagEditor
+                  value={profile.tag}
+                  profileId={profile.id}
+                  isAdmin={isAdmin}
+                  onUpdate={(patch) => onProfileUpdate(profile.id, patch)}
+                />
+              </div>
             </div>
             <div className="detail-top-aside">
               <div className="detail-scan-col">
@@ -1913,6 +2302,8 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [thumbSlider, setThumbSlider] = useState(0);
+  const thumbSize = Math.round(220 * Math.pow(1200 / 220, thumbSlider / 100));
 
   const isAdmin = authRole === "admin";
 
@@ -2003,11 +2394,30 @@ export default function App() {
     <>
       <style>{styles}</style>
       <nav className="nav">
-        <div className="nav-logo" onClick={handleBack}>CPW <span>PROFILE</span> CATALOG</div>
+        <div className="nav-logo" onClick={handleBack}>
+          <img src={logo} alt="CPW Logo" className="nav-logo-img" />
+          CPW <span>PROFILE</span> CATALOG
+        </div>
         {!selectedProfile && (
           <div className="nav-search">
             <span className="nav-search-icon">⌕</span>
             <input placeholder="Search profiles..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+        )}
+        {!selectedProfile && (
+          <div className="nav-slider-wrap">
+            <span className="nav-slider-icon">▦</span>
+            <input
+              className="nav-slider"
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              value={thumbSlider}
+              onChange={(e) => setThumbSlider(Number(e.target.value))}
+              aria-label="Thumbnail size"
+            />
+            <span className="nav-slider-icon">▪</span>
           </div>
         )}
         <div className="nav-count">
@@ -2048,12 +2458,20 @@ export default function App() {
             {loading ? (
               <div className="loading-wrap">Loading profiles...</div>
             ) : (
-              <div className="grid">
+              <div
+                className="grid"
+                style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${thumbSize}px, 1fr))` }}
+              >
                 {filtered.length === 0 ? (
                   <div className="empty-grid">No profiles found</div>
                 ) : (
                   filtered.map((p) => (
-                    <ProfileCard key={p.id} profile={p} onClick={() => { setSelected(p.id); window.scrollTo(0, 0); }} />
+                    <ProfileCard
+                      key={p.id}
+                      profile={p}
+                      onClick={() => { setSelected(p.id); window.scrollTo(0, 0); }}
+                      thumbSize={thumbSize}
+                    />
                   ))
                 )}
               </div>
