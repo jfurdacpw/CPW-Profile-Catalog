@@ -900,28 +900,85 @@ const styles = `
   .db-tool     { background: rgba(42,92,138,0.1); color: var(--accent2); border: 1px solid rgba(42,92,138,0.3); }
   .db-lod      { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
 
-  .detail-file-btns { display: flex; gap: 12px; flex-wrap: wrap; }
-
-  .file-btn {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 500;
-    padding: 10px 20px;
-    border-radius: var(--radius);
-    border: 2px solid var(--text);
-    background: var(--text);
-    color: var(--bg);
-    cursor: pointer;
-    text-decoration: none;
-    display: inline-flex; align-items: center; gap: 8px;
-    transition: all 0.12s;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+  .detail-file-btns {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
   }
 
-  .file-btn:hover { background: var(--accent); border-color: var(--accent); }
-  .file-btn.secondary { background: transparent; color: var(--text); }
-  .file-btn.secondary:hover { background: var(--text); color: var(--bg); }
+  .file-btn-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .detail-file-upload-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .file-upload-error {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: #e07070;
+  }
+
+  .file-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 36px;
+    line-height: 1.2;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    text-decoration: none;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    box-sizing: border-box;
+    background: var(--text);
+    border: 1px solid var(--text);
+    color: var(--bg);
+    transition: opacity 0.15s;
+  }
+  .file-btn:hover { opacity: 0.85; }
+  .file-btn.secondary {
+    background: var(--text);
+    border: 1px solid var(--text);
+    color: var(--bg);
+  }
+  .file-btn.secondary:hover { opacity: 0.85; }
+
+  .file-upload-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 36px;
+    line-height: 1.2;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    box-sizing: border-box;
+    appearance: none;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .file-upload-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .file-upload-btn:disabled { opacity: 0.5; cursor: default; }
 
   .detail-fields {
     padding: 40px 0 48px 0;
@@ -1487,6 +1544,74 @@ function DetailScanUpload({ profile, onScanUpdate }) {
   );
 }
 
+function DetailFileUpload({ profile, fileType, onUploadComplete }) {
+  const fileRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const isPdf = fileType === "pdf";
+  const existingUrl = isPdf ? profile.pdf_url : profile.drawing_url;
+  const accept = isPdf ? "application/pdf" : ".dwg";
+  const storagePath = isPdf
+    ? `pdfs/${parseInt(profile.name, 10)}.pdf`
+    : `drawings/${parseInt(profile.name, 10)}.dwg`;
+  const dbField = isPdf ? "pdf_url" : "drawing_url";
+  const label = isPdf ? "PDF" : "DWG";
+
+  const onFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+
+    if (existingUrl) {
+      const confirmed = window.confirm(`This profile already has a ${label}. Replace it?`);
+      if (!confirmed) return;
+    }
+
+    setError(null);
+    setUploading(true);
+    const base = SUPABASE_URL.replace(/\/$/, "");
+    const putUrl = `${base}/storage/v1/object/${PROFILE_FILES_BUCKET}/${storagePath}?upsert=true`;
+    const contentType = isPdf ? "application/pdf" : "application/octet-stream";
+
+    try {
+      const res = await fetch(putUrl, {
+        method: "PUT",
+        headers: {
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": contentType,
+        },
+        body: file,
+      });
+      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      const publicUrl = `${base}/storage/v1/object/public/${PROFILE_FILES_BUCKET}/${storagePath}`;
+      await supabasePatch(profile.id, { [dbField]: publicUrl });
+      onUploadComplete({ [dbField]: publicUrl });
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="detail-file-upload-wrap">
+      <input ref={fileRef} type="file" accept={accept} hidden onChange={onFileChange} />
+      <button
+        type="button"
+        className="file-upload-btn"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploading}
+      >
+        {uploading ? "Uploading…" : `↑ Upload ${label}`}
+      </button>
+      {error && <div className="file-upload-error">{error}</div>}
+    </div>
+  );
+}
+
 function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
   return (
     <div className="detail-page">
@@ -1531,16 +1656,33 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
                 {profile.level_of_detail && <span className="detail-badge db-lod">{profile.level_of_detail}</span>}
               </div>
               <div className="detail-file-btns">
-                {profile.pdf_url && (
-                  <a className="file-btn" href={profile.pdf_url} download>📄 Download PDF</a>
-                )}
-                {profile.drawing_url && (
-                  <a className="file-btn secondary" href={profile.drawing_url} download>📐 Download DWG</a>
-                )}
+                <div className="file-btn-group">
+                  {isAdmin && (
+                    <DetailFileUpload
+                      profile={profile}
+                      fileType="pdf"
+                      onUploadComplete={(patch) => onProfileUpdate(profile.id, patch)}
+                    />
+                  )}
+                  {profile.pdf_url && (
+                    <a className="file-btn" href={profile.pdf_url} download>📄 Download PDF</a>
+                  )}
+                </div>
+                <div className="file-btn-group">
+                  {isAdmin && (
+                    <DetailFileUpload
+                      profile={profile}
+                      fileType="dwg"
+                      onUploadComplete={(patch) => onProfileUpdate(profile.id, patch)}
+                    />
+                  )}
+                  {profile.drawing_url && (
+                    <a className="file-btn secondary" href={profile.drawing_url} download>📐 Download DWG</a>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-          {profile.descriptive_name && <div className="detail-desc">{profile.name}</div>}
           <div className="detail-fields">
             {FIELD_GROUPS.map((g) => (
               <FieldGroup
