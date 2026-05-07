@@ -2529,7 +2529,7 @@ export default function App() {
   const [thumbSlider, setThumbSlider] = useState(0);
   const thumbSize = Math.round(220 * Math.pow(1200 / 220, thumbSlider / 100));
 
-  const isAdmin = session?.user?.user_metadata?.role === "admin";
+  const isAdmin = session?.user?.app_metadata?.role === "admin";
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
