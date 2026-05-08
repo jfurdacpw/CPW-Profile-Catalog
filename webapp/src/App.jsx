@@ -563,6 +563,8 @@ const styles = `
     letter-spacing: 0.04em;
     text-transform: uppercase;
     white-space: nowrap;
+    touch-action: manipulation;
+    min-height: 40px;
   }
 
   .filter-chip:hover { border-color: var(--accent); color: var(--accent); }
@@ -732,6 +734,22 @@ const styles = `
     transition: background 0.15s, color 0.15s;
   }
   .detail-delete-btn:hover { background: #7a3030; color: #fff; }
+
+  .pdf-visibility-toggle {
+    display: block;
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 12px;
+    text-align: left;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .pdf-visibility-toggle:hover { color: var(--text); }
 
   .detail-hero {
     flex: 1;
@@ -1450,7 +1468,146 @@ const styles = `
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
+
+  /* Mobile nav */
+  @media (max-width: 767px) {
+    .nav { flex-wrap: wrap; gap: 8px; padding: 10px 14px; align-items: center; }
+    .nav-logo { order: 1; flex: 1; font-size: 13px; }
+    .nav-logout { order: 2; white-space: nowrap; }
+    .nav-count { order: 3; width: 100%; font-size: 11px; }
+    .nav-add-btn { order: 4; width: 100%; }
+    .nav-slider-wrap { display: none; }
+  }
+
+  /* Mobile filter */
+  .mobile-filter-wrap { padding: 8px 14px 0; position: relative; }
+  .mobile-filter-top-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mobile-search {
+    flex: 1;
+    min-width: 0;
+  }
+  .mobile-filter-wrap .nav-search {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0 10px;
+  }
+  .mobile-filter-wrap .nav-search input {
+    background: transparent;
+    color: var(--text);
+    border: none;
+    outline: none;
+    font-family: var(--mono);
+    font-size: 12px;
+    width: 100%;
+    padding: 8px 0;
+  }
+  .mobile-filter-wrap .nav-search-icon {
+    color: var(--muted);
+  }
+  .mobile-filter-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 16px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    touch-action: manipulation;
+    min-height: 44px;
+  }
+  .mobile-filter-btn.open { border-color: var(--accent); }
+  .mobile-filter-dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+  }
+  .mobile-filter-drawer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .filter-drawer-section { display: flex; flex-direction: column; gap: 6px; }
+  .filter-chips-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Mobile grid + detail layout + scrolling */
+  @media (max-width: 767px) {
+    .grid { grid-template-columns: repeat(2, 1fr) !important; }
+    .grid-page { padding: 10px; }
+
+    .detail-page {
+      overflow-y: auto;
+      height: auto;
+    }
+    .detail-hero {
+      min-height: unset !important;
+    }
+
+    .detail-top-row {
+      gap: 10px;
+    }
+    .detail-top-aside {
+      width: 140px;
+      min-width: 140px;
+      flex-shrink: 0;
+    }
+    .detail-scan-small {
+      width: 140px;
+      height: 140px;
+      object-fit: contain;
+    }
+    .detail-scan-small-placeholder {
+      width: 140px;
+      height: 140px;
+    }
+    .detail-badge-row {
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 6px;
+    }
+    .detail-badge {
+      font-size: 7px;
+      padding: 1px 4px;
+    }
+    .file-btn-group {
+      flex-direction: column;
+    }
+    .file-btn {
+      font-size: 9px;
+      padding: 4px 6px;
+      text-align: center;
+    }
+    .detail-num {
+      font-size: 13px;
+    }
+    .detail-name {
+      font-size: 32px;
+    }
+  }
 `;
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+  return isMobile;
+}
 
 function PdfThumb({ pdfUrl, wrap = true, targetPx = 220, className = "card-pdf-thumb", fitContainer = false }) {
   const canvasRef = useRef(null);
@@ -2206,8 +2363,9 @@ function PdfSection({ profile, isAdmin, onSetPrimary, onSetActivePdf }) {
   );
 }
 
-function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
+function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete, isMobile }) {
   const [activePdfUrl, setActivePdfUrl] = useState(profile.pdf_url);
+  const [pdfVisible, setPdfVisible] = useState(!isMobile);
 
   useEffect(() => {
     setActivePdfUrl(profile.pdf_url);
@@ -2223,15 +2381,47 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete }) {
           </button>
         )}
       </div>
-      <div className="detail-hero">
-        <div className="detail-pdf-col">
-          {activePdfUrl ? (
-            <PdfThumb pdfUrl={activePdfUrl} className="detail-pdf-thumb" targetPx={900} fitContainer />
-          ) : (
-            <div className="detail-pdf-placeholder">No PDF</div>
-          )}
-        </div>
-        <div className="detail-right-col">
+      <div
+        className="detail-hero"
+        style={isMobile ? { display: "flex", flexDirection: "column", minHeight: "unset" } : {}}
+      >
+        {isMobile && (
+          <button
+            type="button"
+            className="pdf-visibility-toggle"
+            onClick={() => setPdfVisible((v) => !v)}
+          >
+            {pdfVisible ? "▲ Hide PDF" : "▼ Show PDF"}
+          </button>
+        )}
+
+        {(!isMobile || pdfVisible) && (
+          <div
+            className="detail-pdf-col"
+            style={
+              isMobile
+                ? {
+                    width: "100%",
+                    height: "auto",
+                    minHeight: "50vh",
+                    borderRight: "none",
+                    borderBottom: "1px solid var(--border)",
+                  }
+                : {}
+            }
+          >
+            {activePdfUrl ? (
+              <PdfThumb pdfUrl={activePdfUrl} className="detail-pdf-thumb" targetPx={900} fitContainer />
+            ) : (
+              <div className="detail-pdf-placeholder">No PDF</div>
+            )}
+          </div>
+        )}
+
+        <div
+          className="detail-right-col"
+          style={isMobile ? { width: "100%", maxHeight: "unset", overflowY: "unset", flex: "1" } : {}}
+        >
           <div className="detail-top-row">
             <div className="detail-top-titles">
               <div className="detail-num">Profile #{profile.name}</div>
@@ -2526,9 +2716,12 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [missingFilters, setMissingFilters] = useState(new Set());
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [thumbSlider, setThumbSlider] = useState(0);
   const thumbSize = Math.round(220 * Math.pow(1200 / 220, thumbSlider / 100));
+
+  const isMobile = useIsMobile();
 
   const isAdmin = session?.user?.app_metadata?.role === "admin";
 
@@ -2652,13 +2845,13 @@ export default function App() {
           <img src={logo} alt="CPW Logo" className="nav-logo-img" />
           CPW <span>PROFILE</span> CATALOG
         </div>
-        {!selectedProfile && (
+        {!isMobile && !selectedProfile && (
           <div className="nav-search">
             <span className="nav-search-icon">⌕</span>
             <input placeholder="Search profiles..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         )}
-        {!selectedProfile && (
+        {!isMobile && !selectedProfile && (
           <div className="nav-slider-wrap">
             <span className="nav-slider-icon">▦</span>
             <input
@@ -2694,52 +2887,134 @@ export default function App() {
           onProfileUpdate={handleProfileUpdate}
           isAdmin={isAdmin}
           onDelete={handleDeleteProfile}
+          isMobile={isMobile}
         />
       ) : (
         <>
-          <div className="filter-bar">
-            <span className="filter-label">Category</span>
-            <button className={`filter-chip${!categoryFilter ? " active" : ""}`} onClick={() => setCategoryFilter(null)}>All</button>
-            {activeCategories.map((cat) => (
-              <button
-                key={cat}
-                className={`filter-chip${categoryFilter === cat ? " active" : ""}`}
-                onClick={() => setCategoryFilter(cat === categoryFilter ? null : cat)}
-              >{cat}</button>
-            ))}
-          </div>
-          <div className="filter-bar">
-            <span className="filter-label">Missing</span>
-            <button
-              type="button"
-              className={`filter-chip${missingFilters.size === 0 ? " active" : ""}`}
-              onClick={() => setMissingFilters(new Set())}
-            >
-              None
-            </button>
-            {[
-              { key: "pdf", label: "PDF" },
-              { key: "dwg", label: "DWG" },
-              { key: "scan", label: "Scan" },
-              { key: "tags", label: "Tags" },
-            ].map(({ key, label }) => (
-              <button
-                type="button"
-                key={key}
-                className={`filter-chip${missingFilters.has(key) ? " active" : ""}`}
-                onClick={() =>
-                  setMissingFilters((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(key)) next.delete(key);
-                    else next.add(key);
-                    return next;
-                  })
-                }
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {isMobile ? (
+            <div className="mobile-filter-wrap">
+              <div className="mobile-filter-top-row">
+                <div className="nav-search mobile-search">
+                  <span className="nav-search-icon">⌕</span>
+                  <input placeholder="Search..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                </div>
+                <button
+                  type="button"
+                  className={`mobile-filter-btn${filterDrawerOpen ? " open" : ""}`}
+                  onClick={() => setFilterDrawerOpen((o) => !o)}
+                >
+                  ⚙ Filters
+                  {(categoryFilter || missingFilters.size > 0) && <span className="mobile-filter-dot" />}
+                </button>
+              </div>
+              {filterDrawerOpen && (
+                <div className="mobile-filter-drawer">
+                  <div className="filter-drawer-section">
+                    <span className="filter-label">Category</span>
+                    <div className="filter-chips-wrap">
+                      <button
+                        type="button"
+                        className={`filter-chip${!categoryFilter ? " active" : ""}`}
+                        onClick={() => setCategoryFilter(null)}
+                      >
+                        All
+                      </button>
+                      {activeCategories.map((cat) => (
+                        <button
+                          type="button"
+                          key={cat}
+                          className={`filter-chip${categoryFilter === cat ? " active" : ""}`}
+                          onClick={() => setCategoryFilter(cat === categoryFilter ? null : cat)}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filter-drawer-section">
+                    <span className="filter-label">Missing</span>
+                    <div className="filter-chips-wrap">
+                      <button
+                        type="button"
+                        className={`filter-chip${missingFilters.size === 0 ? " active" : ""}`}
+                        onClick={() => setMissingFilters(new Set())}
+                      >
+                        None
+                      </button>
+                      {[
+                        { key: "pdf", label: "PDF" },
+                        { key: "dwg", label: "DWG" },
+                        { key: "scan", label: "Scan" },
+                        { key: "tags", label: "Tags" },
+                      ].map(({ key, label }) => (
+                        <button
+                          type="button"
+                          key={key}
+                          className={`filter-chip${missingFilters.has(key) ? " active" : ""}`}
+                          onClick={() =>
+                            setMissingFilters((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(key)) next.delete(key);
+                              else next.add(key);
+                              return next;
+                            })
+                          }
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="filter-bar">
+                <span className="filter-label">Category</span>
+                <button className={`filter-chip${!categoryFilter ? " active" : ""}`} onClick={() => setCategoryFilter(null)}>All</button>
+                {activeCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    className={`filter-chip${categoryFilter === cat ? " active" : ""}`}
+                    onClick={() => setCategoryFilter(cat === categoryFilter ? null : cat)}
+                  >{cat}</button>
+                ))}
+              </div>
+              <div className="filter-bar">
+                <span className="filter-label">Missing</span>
+                <button
+                  type="button"
+                  className={`filter-chip${missingFilters.size === 0 ? " active" : ""}`}
+                  onClick={() => setMissingFilters(new Set())}
+                >
+                  None
+                </button>
+                {[
+                  { key: "pdf", label: "PDF" },
+                  { key: "dwg", label: "DWG" },
+                  { key: "scan", label: "Scan" },
+                  { key: "tags", label: "Tags" },
+                ].map(({ key, label }) => (
+                  <button
+                    type="button"
+                    key={key}
+                    className={`filter-chip${missingFilters.has(key) ? " active" : ""}`}
+                    onClick={() =>
+                      setMissingFilters((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(key)) next.delete(key);
+                        else next.add(key);
+                        return next;
+                      })
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <div className="grid-page">
             {loading ? (
               <div className="loading-wrap">Loading profiles...</div>
