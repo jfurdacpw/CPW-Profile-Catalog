@@ -2525,6 +2525,7 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
+  const [missingFilters, setMissingFilters] = useState(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [thumbSlider, setThumbSlider] = useState(0);
   const thumbSize = Math.round(220 * Math.pow(1200 / 220, thumbSlider / 100));
@@ -2587,9 +2588,15 @@ export default function App() {
         p.descriptive_name?.toLowerCase().includes(search.toLowerCase()) ||
         p.tag?.toLowerCase().includes(search.toLowerCase());
       const matchCat = !categoryFilter || p.profile_category === categoryFilter;
-      return matchSearch && matchCat;
+      const matchMissing =
+        missingFilters.size === 0 ||
+        ((!missingFilters.has("pdf") || !p.pdf_url) &&
+          (!missingFilters.has("dwg") || !p.drawing_url) &&
+          (!missingFilters.has("scan") || !p.scan_url) &&
+          (!missingFilters.has("tags") || !p.tag));
+      return matchSearch && matchCat && matchMissing;
     });
-  }, [profiles, search, categoryFilter]);
+  }, [profiles, search, categoryFilter, missingFilters]);
 
   const activeCategories = useMemo(() => {
     const cats = new Set(profiles.map((p) => p.profile_category).filter(Boolean));
@@ -2699,6 +2706,38 @@ export default function App() {
                 className={`filter-chip${categoryFilter === cat ? " active" : ""}`}
                 onClick={() => setCategoryFilter(cat === categoryFilter ? null : cat)}
               >{cat}</button>
+            ))}
+          </div>
+          <div className="filter-bar">
+            <span className="filter-label">Missing</span>
+            <button
+              type="button"
+              className={`filter-chip${missingFilters.size === 0 ? " active" : ""}`}
+              onClick={() => setMissingFilters(new Set())}
+            >
+              None
+            </button>
+            {[
+              { key: "pdf", label: "PDF" },
+              { key: "dwg", label: "DWG" },
+              { key: "scan", label: "Scan" },
+              { key: "tags", label: "Tags" },
+            ].map(({ key, label }) => (
+              <button
+                type="button"
+                key={key}
+                className={`filter-chip${missingFilters.has(key) ? " active" : ""}`}
+                onClick={() =>
+                  setMissingFilters((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(key)) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })
+                }
+              >
+                {label}
+              </button>
             ))}
           </div>
           <div className="grid-page">
