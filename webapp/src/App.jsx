@@ -540,6 +540,17 @@ const styles = `
     gap: 6px; flex-wrap: wrap;
   }
 
+  .filter-section {
+    width: 100%;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 32px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
   .filter-label {
     font-family: var(--mono);
     font-size: 10px;
@@ -734,6 +745,53 @@ const styles = `
     transition: background 0.15s, color 0.15s;
   }
   .detail-delete-btn:hover { background: #7a3030; color: #fff; }
+
+  .detail-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .detail-archive-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: transparent;
+    border: 1px solid #7a6230;
+    border-radius: var(--radius);
+    color: var(--accent);
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .detail-archive-btn:hover { background: #7a6230; color: #fff; }
+
+  .detail-unarchive-btn {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: transparent;
+    border: 1px solid #3a5a3a;
+    border-radius: var(--radius);
+    color: var(--accent2);
+    padding: 5px 12px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .detail-unarchive-btn:hover { background: #3a5a3a; color: #fff; }
+
+  .card-badge-archived {
+    font-family: var(--mono);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgba(245, 158, 11, 0.12);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+  }
 
   .pdf-visibility-toggle {
     display: block;
@@ -1755,6 +1813,7 @@ function ProfileCard({ profile, onClick, thumbSize }) {
           {profile.descriptive_name || profile.profile_category || "—"}
         </div>
         <div className="card-badges">
+          {profile.archived && <span className="card-badge-archived">Archived</span>}
           {profile.pdf_url && <span className="card-badge badge-pdf">PDF</span>}
           {profile.drawing_url && <span className="card-badge badge-dwg">DWG</span>}
           {profile.scan_url && <span className="card-badge badge-scan">Scan</span>}
@@ -2363,9 +2422,17 @@ function PdfSection({ profile, isAdmin, onSetPrimary, onSetActivePdf }) {
   );
 }
 
-function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete, isMobile }) {
+function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onArchive, onUnarchive, onDelete, isMobile }) {
   const [activePdfUrl, setActivePdfUrl] = useState(profile.pdf_url);
   const [pdfVisible, setPdfVisible] = useState(!isMobile);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") onBack();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onBack]);
 
   useEffect(() => {
     setActivePdfUrl(profile.pdf_url);
@@ -2375,11 +2442,23 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onDelete, isMob
     <div className="detail-page">
       <div className="detail-topbar">
         <div className="detail-back" onClick={onBack}>← Back to catalog</div>
-        {isAdmin && (
-          <button type="button" className="detail-delete-btn" onClick={() => onDelete(profile)}>
-            Delete Profile
-          </button>
-        )}
+        <div className="detail-topbar-actions">
+          {isAdmin && !profile.archived && (
+            <button type="button" className="detail-archive-btn" onClick={() => onArchive(profile)}>
+              Archive Profile
+            </button>
+          )}
+          {isAdmin && profile.archived && (
+            <>
+              <button type="button" className="detail-unarchive-btn" onClick={() => onUnarchive(profile)}>
+                Unarchive Profile
+              </button>
+              <button type="button" className="detail-delete-btn" onClick={() => onDelete(profile)}>
+                Delete Permanently
+              </button>
+            </>
+          )}
+        </div>
       </div>
       <div
         className="detail-hero"
@@ -2716,6 +2795,7 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [missingFilters, setMissingFilters] = useState(new Set());
+  const [archivedFilter, setArchivedFilter] = useState(false);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [thumbSlider, setThumbSlider] = useState(0);
@@ -2754,11 +2834,33 @@ export default function App() {
     setProfiles((prev) => [...prev, newProfile].sort((a, b) => a.name.localeCompare(b.name)));
   };
 
+  const handleArchiveProfile = async (profile) => {
+    if (!window.confirm(`Archive profile ${profile.name}?`)) return;
+    const { error } = await supabase.from("profiles").update({ archived: true }).eq("id", profile.id);
+    if (error) {
+      alert("Error archiving profile.");
+      return;
+    }
+    setProfiles((prev) => prev.map((p) => (p.id === profile.id ? { ...p, archived: true } : p)));
+    setSelected(null);
+  };
+
+  const handleUnarchiveProfile = async (profile) => {
+    if (!window.confirm(`Unarchive profile ${profile.name}?`)) return;
+    const { error } = await supabase.from("profiles").update({ archived: false }).eq("id", profile.id);
+    if (error) {
+      alert("Error unarchiving profile.");
+      return;
+    }
+    setProfiles((prev) => prev.map((p) => (p.id === profile.id ? { ...p, archived: false } : p)));
+    setSelected(null);
+  };
+
   const handleDeleteProfile = async (profile) => {
-    if (!window.confirm(`Delete profile #${profile.name}? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete profile ${profile.name}? This cannot be undone.`)) return;
     const { error } = await supabase.from("profiles").delete().eq("id", profile.id);
     if (error) {
-      console.error(error);
+      alert("Error deleting profile.");
       return;
     }
     setProfiles((prev) => prev.filter((p) => p.id !== profile.id));
@@ -2775,21 +2877,24 @@ export default function App() {
   }, []);
 
   const filtered = useMemo(() => {
-    return profiles.filter((p) => {
-      const matchSearch = !search ||
-        p.name?.toLowerCase().includes(search.toLowerCase()) ||
-        p.descriptive_name?.toLowerCase().includes(search.toLowerCase()) ||
-        p.tag?.toLowerCase().includes(search.toLowerCase());
-      const matchCat = !categoryFilter || p.profile_category === categoryFilter;
-      const matchMissing =
-        missingFilters.size === 0 ||
-        ((!missingFilters.has("pdf") || !p.pdf_url) &&
-          (!missingFilters.has("dwg") || !p.drawing_url) &&
-          (!missingFilters.has("scan") || !p.scan_url) &&
-          (!missingFilters.has("tags") || !p.tag));
-      return matchSearch && matchCat && matchMissing;
-    });
-  }, [profiles, search, categoryFilter, missingFilters]);
+    return profiles
+      .filter((p) => (archivedFilter ? p.archived === true : !p.archived))
+      .filter((p) => {
+        const matchSearch =
+          !search ||
+          p.name?.toLowerCase().includes(search.toLowerCase()) ||
+          p.descriptive_name?.toLowerCase().includes(search.toLowerCase()) ||
+          p.tag?.toLowerCase().includes(search.toLowerCase());
+        const matchCat = !categoryFilter || p.profile_category === categoryFilter;
+        const matchMissing =
+          missingFilters.size === 0 ||
+          ((!missingFilters.has("pdf") || !p.pdf_url) &&
+            (!missingFilters.has("dwg") || !p.drawing_url) &&
+            (!missingFilters.has("scan") || !p.scan_url) &&
+            (!missingFilters.has("tags") || !p.tag));
+        return matchSearch && matchCat && matchMissing;
+      });
+  }, [profiles, search, categoryFilter, missingFilters, archivedFilter]);
 
   const activeCategories = useMemo(() => {
     const cats = new Set(profiles.map((p) => p.profile_category).filter(Boolean));
@@ -2886,6 +2991,8 @@ export default function App() {
           onBack={handleBack}
           onProfileUpdate={handleProfileUpdate}
           isAdmin={isAdmin}
+          onArchive={handleArchiveProfile}
+          onUnarchive={handleUnarchiveProfile}
           onDelete={handleDeleteProfile}
           isMobile={isMobile}
         />
@@ -2904,7 +3011,7 @@ export default function App() {
                   onClick={() => setFilterDrawerOpen((o) => !o)}
                 >
                   ⚙ Filters
-                  {(categoryFilter || missingFilters.size > 0) && <span className="mobile-filter-dot" />}
+                  {(categoryFilter || missingFilters.size > 0 || archivedFilter) && <span className="mobile-filter-dot" />}
                 </button>
               </div>
               {filterDrawerOpen && (
@@ -2965,6 +3072,18 @@ export default function App() {
                       ))}
                     </div>
                   </div>
+                  <div className="filter-drawer-section">
+                    <span className="filter-label">Status</span>
+                    <div className="filter-chips-wrap">
+                      <button
+                        type="button"
+                        className={`filter-chip${archivedFilter ? " active" : ""}`}
+                        onClick={() => setArchivedFilter((v) => !v)}
+                      >
+                        {archivedFilter ? "Archived" : "Active"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -3012,6 +3131,16 @@ export default function App() {
                     {label}
                   </button>
                 ))}
+              </div>
+              <div className="filter-section">
+                <span className="filter-label">Status</span>
+                <button
+                  type="button"
+                  className={`filter-chip${archivedFilter ? " active" : ""}`}
+                  onClick={() => setArchivedFilter((v) => !v)}
+                >
+                  {archivedFilter ? "Archived" : "Active"}
+                </button>
               </div>
             </>
           )}
