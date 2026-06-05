@@ -588,6 +588,41 @@ const styles = `
   .filter-chip:hover { border-color: var(--accent); color: var(--accent); }
   .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
+  .radius-range {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .radius-range-input {
+    font-family: var(--mono);
+    font-size: 11px;
+    width: 64px;
+    padding: 4px 8px;
+    min-height: 40px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .radius-range-input:focus { outline: none; border-color: var(--accent); }
+  .radius-range-sep { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  .sort-select {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    min-height: 40px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .sort-select:focus { outline: none; border-color: var(--accent); }
+
   .grid-page { padding: 28px; }
 
   .grid {
@@ -2779,6 +2814,10 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState(null);
   const [missingFilters, setMissingFilters] = useState(new Set());
   const [archivedFilter, setArchivedFilter] = useState(false);
+  const [hasRadiusFilter, setHasRadiusFilter] = useState(false);
+  const [radiusMin, setRadiusMin] = useState("");
+  const [radiusMax, setRadiusMax] = useState("");
+  const [sortBy, setSortBy] = useState("name");
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [thumbSlider, setThumbSlider] = useState(0);
@@ -2867,7 +2906,9 @@ export default function App() {
   }, []);
 
   const filtered = useMemo(() => {
-    return profiles
+    const minVal = radiusMin.trim() === "" ? null : Number(radiusMin);
+    const maxVal = radiusMax.trim() === "" ? null : Number(radiusMax);
+    const result = profiles
       .filter((p) => (archivedFilter ? p.archived === true : !p.archived))
       .filter((p) => {
         const matchSearch =
@@ -2882,9 +2923,34 @@ export default function App() {
             (!missingFilters.has("dwg") || !p.drawing_url) &&
             (!missingFilters.has("scan") || !p.scan_url) &&
             (!missingFilters.has("tags") || !p.tag));
-        return matchSearch && matchCat && matchMissing;
+        let matchRadius = true;
+        if (hasRadiusFilter) {
+          const r = p.primary_radius;
+          matchRadius =
+            r != null &&
+            (minVal == null || Number.isNaN(minVal) || r >= minVal) &&
+            (maxVal == null || Number.isNaN(maxVal) || r <= maxVal);
+        }
+        return matchSearch && matchCat && matchMissing && matchRadius;
       });
-  }, [profiles, search, categoryFilter, missingFilters, archivedFilter]);
+
+    if (sortBy === "radius_asc" || sortBy === "radius_desc") {
+      const dir = sortBy === "radius_asc" ? 1 : -1;
+      result.sort((a, b) => {
+        const ra = a.primary_radius;
+        const rb = b.primary_radius;
+        // Profiles without a radius always sink to the bottom.
+        if (ra == null && rb == null) return a.name.localeCompare(b.name);
+        if (ra == null) return 1;
+        if (rb == null) return -1;
+        if (ra !== rb) return (ra - rb) * dir;
+        return a.name.localeCompare(b.name);
+      });
+    } else {
+      result.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    return result;
+  }, [profiles, search, categoryFilter, missingFilters, archivedFilter, hasRadiusFilter, radiusMin, radiusMax, sortBy]);
 
   const activeCategories = useMemo(() => {
     const cats = new Set(profiles.map((p) => p.profile_category).filter(Boolean));
@@ -3001,7 +3067,7 @@ export default function App() {
                   onClick={() => setFilterDrawerOpen((o) => !o)}
                 >
                   ⚙ Filters
-                  {(categoryFilter || missingFilters.size > 0 || archivedFilter) && <span className="mobile-filter-dot" />}
+                  {(categoryFilter || missingFilters.size > 0 || archivedFilter || hasRadiusFilter) && <span className="mobile-filter-dot" />}
                 </button>
               </div>
               {filterDrawerOpen && (
@@ -3074,6 +3140,53 @@ export default function App() {
                       </button>
                     </div>
                   </div>
+                  <div className="filter-drawer-section">
+                    <span className="filter-label">Radius</span>
+                    <div className="filter-chips-wrap">
+                      <button
+                        type="button"
+                        className={`filter-chip${hasRadiusFilter ? " active" : ""}`}
+                        onClick={() => setHasRadiusFilter((v) => !v)}
+                      >
+                        Has Radius
+                      </button>
+                    </div>
+                    {hasRadiusFilter && (
+                      <div className="radius-range">
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          className="radius-range-input"
+                          placeholder="Min"
+                          value={radiusMin}
+                          onChange={(e) => setRadiusMin(e.target.value)}
+                        />
+                        <span className="radius-range-sep">–</span>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          className="radius-range-input"
+                          placeholder="Max"
+                          value={radiusMax}
+                          onChange={(e) => setRadiusMax(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="filter-drawer-section">
+                    <span className="filter-label">Sort</span>
+                    <select
+                      className="sort-select"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value)}
+                    >
+                      <option value="name">Name (A–Z)</option>
+                      <option value="radius_asc">Radius (low → high)</option>
+                      <option value="radius_desc">Radius (high → low)</option>
+                    </select>
+                  </div>
                 </div>
               )}
             </div>
@@ -3131,6 +3244,47 @@ export default function App() {
                 >
                   {archivedFilter ? "Archived" : "Active"}
                 </button>
+                <span className="filter-label" style={{ marginLeft: 16 }}>Radius</span>
+                <button
+                  type="button"
+                  className={`filter-chip${hasRadiusFilter ? " active" : ""}`}
+                  onClick={() => setHasRadiusFilter((v) => !v)}
+                >
+                  Has Radius
+                </button>
+                {hasRadiusFilter && (
+                  <span className="radius-range">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      className="radius-range-input"
+                      placeholder="Min"
+                      value={radiusMin}
+                      onChange={(e) => setRadiusMin(e.target.value)}
+                    />
+                    <span className="radius-range-sep">–</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      className="radius-range-input"
+                      placeholder="Max"
+                      value={radiusMax}
+                      onChange={(e) => setRadiusMax(e.target.value)}
+                    />
+                  </span>
+                )}
+                <span className="filter-label" style={{ marginLeft: 16 }}>Sort</span>
+                <select
+                  className="sort-select"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                >
+                  <option value="name">Name (A–Z)</option>
+                  <option value="radius_asc">Radius (low → high)</option>
+                  <option value="radius_desc">Radius (high → low)</option>
+                </select>
               </div>
             </>
           )}
