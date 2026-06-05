@@ -9,6 +9,13 @@ const SUPABASE_URL = "https://sijlcyodgwdovauqcikj.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_7b_OXz7BAZN1--StKqOSfg_ElbHo5OA";
 const PROFILE_FILES_BUCKET = "profile-files";
 
+// MS365 SSO: users whose email is in this list get edit (admin) rights.
+// Everyone else who signs in is view-only. Emails are matched case-insensitively.
+const ADMIN_EMAILS = [
+  "jfurda@ciderpresswoodworks.com",
+  "chris@ciderpresswoodworks.com",
+];
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /** Loads pdf.min.js from CDN once; configures worker. */
@@ -2600,21 +2607,20 @@ function DetailPage({ profile, onBack, onProfileUpdate, isAdmin, onArchive, onUn
   );
 }
 
-function LoginScreen({ onLogin }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+function LoginScreen({ onSignIn }) {
   const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = async () => {
+  const handleSignIn = async () => {
+    setBusy(true);
+    setError(null);
     try {
-      await onLogin(email.trim(), password);
+      await onSignIn();
+      // On success the browser redirects to Microsoft; this stays "busy".
     } catch (err) {
-      setError(err.message || "Invalid credentials.");
+      setError(err.message || "Sign-in failed. Please try again.");
+      setBusy(false);
     }
-  };
-
-  const onKeyDown = (e) => {
-    if (e.key === "Enter") void handleSubmit();
   };
 
   return (
@@ -2624,37 +2630,14 @@ function LoginScreen({ onLogin }) {
           CPW <span>PROFILE</span> CATALOG
         </div>
         <div className="login-subtitle">Sign in to continue</div>
-        <div className="login-field">
-          <label className="login-label">Email</label>
-          <input
-            className="login-input"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setError(null);
-            }}
-            onKeyDown={onKeyDown}
-          />
-        </div>
-        <div className="login-field">
-          <label className="login-label">Password</label>
-          <input
-            className="login-input"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setError(null);
-            }}
-            onKeyDown={onKeyDown}
-          />
-        </div>
         {error && <div className="login-error">{error}</div>}
-        <button className="login-btn" type="button" onClick={handleSubmit}>
-          Sign In
+        <button
+          className="login-btn"
+          type="button"
+          onClick={handleSignIn}
+          disabled={busy}
+        >
+          {busy ? "Redirecting…" : "Sign in with Microsoft"}
         </button>
       </div>
     </div>
@@ -2803,7 +2786,8 @@ export default function App() {
 
   const isMobile = useIsMobile();
 
-  const isAdmin = session?.user?.app_metadata?.role === "admin";
+  const isAdmin = !!session?.user?.email &&
+    ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(session.user.email.toLowerCase());
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s } }) => {
@@ -2818,8 +2802,14 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const handleSignIn = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "azure",
+      options: {
+        scopes: "email openid profile",
+        redirectTo: window.location.origin,
+      },
+    });
     if (error) throw new Error(error.message);
   };
 
@@ -2937,7 +2927,7 @@ export default function App() {
     return (
       <>
         <style>{styles}</style>
-        <LoginScreen onLogin={handleLogin} />
+        <LoginScreen onSignIn={handleSignIn} />
       </>
     );
   }
