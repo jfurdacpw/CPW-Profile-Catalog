@@ -2857,6 +2857,7 @@ export default function App() {
     setProfiles([]);
     setLoading(true);
     setSelected(null);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
   };
 
   const handleProfileCreated = (newProfile) => {
@@ -2958,6 +2959,39 @@ export default function App() {
   }, [profiles]);
 
   const selectedProfile = selected ? profiles.find((p) => p.id === selected) : null;
+
+  // Read direction: resolve the URL hash (e.g. #/profile/042) to a profile so a
+  // shared/pasted link — or the browser back/forward buttons — opens that page.
+  useEffect(() => {
+    if (profiles.length === 0) return; // wait until data is loaded to resolve links
+    const applyHash = () => {
+      const m = window.location.hash.match(/^#\/profile\/(.+)$/);
+      if (!m) {
+        setSelected(null);
+        return;
+      }
+      const key = decodeURIComponent(m[1]);
+      const prof = profiles.find((p) => p.name === key) || profiles.find((p) => p.id === key);
+      setSelected(prof ? prof.id : null);
+    };
+    applyHash();
+    window.addEventListener("hashchange", applyHash);
+    return () => window.removeEventListener("hashchange", applyHash);
+  }, [profiles]);
+
+  // Write direction: keep the URL hash mirroring the selected profile so the
+  // address bar always points at the exact page the user is looking at.
+  useEffect(() => {
+    if (profiles.length === 0) return; // don't clobber a deep link before data loads
+    const prof = selected ? profiles.find((p) => p.id === selected) : null;
+    const desired = prof ? `#/profile/${encodeURIComponent(prof.name)}` : "";
+    if (window.location.hash === desired) return;
+    if (desired) {
+      window.location.hash = desired;
+    } else {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }, [selected, profiles]);
 
   useEffect(() => {
     if (!session) return;
