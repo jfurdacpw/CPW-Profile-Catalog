@@ -14,6 +14,7 @@ const PROFILE_FILES_BUCKET = "profile-files";
 const ADMIN_EMAILS = [
   "jfurda@ciderpresswoodworks.com",
   "chris@ciderpresswoodworks.com",
+  "dan@ciderpresswoodworks.com",
 ];
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
