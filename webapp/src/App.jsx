@@ -1572,7 +1572,7 @@ const styles = `
 
   /* Mobile nav */
   @media (max-width: 767px) {
-    .nav { flex-wrap: wrap; gap: 8px; padding: 10px 14px; align-items: center; }
+    .nav { height: auto; flex-wrap: wrap; gap: 8px; padding: 10px 14px; align-items: center; }
     .nav-logo { order: 1; flex: 1; font-size: 13px; }
     .nav-logout { order: 2; white-space: nowrap; }
     .nav-count { order: 3; width: 100%; font-size: 11px; }
