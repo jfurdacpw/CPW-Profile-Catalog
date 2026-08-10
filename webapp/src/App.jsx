@@ -105,7 +105,10 @@ async function uploadProfileStorageObject(storagePath, file, contentType) {
   const {
     data: { publicUrl },
   } = supabase.storage.from(PROFILE_FILES_BUCKET).getPublicUrl(storagePath);
-  return publicUrl;
+  // Uploads upsert to a fixed object key, so the public URL never changes and
+  // browsers keep serving the cached copy. Version it so every replacement
+  // renders immediately, here and for everyone else who loads the profile.
+  return `${publicUrl}?v=${Date.now()}`;
 }
 
 /** Storage object key: scans/{name}.png (slashes in name stripped for safety). */
@@ -2181,6 +2184,22 @@ function DetailScanUpload({ profile, onScanUpdate }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
+  // Local blob preview so the picked image shows the instant it is chosen,
+  // before the upload round trip finishes.
+  const [preview, setPreview] = useState(null);
+  const previewRef = useRef(null);
+
+  // Drop the preview when switching profiles, and free the blob on unmount.
+  useEffect(
+    () => () => {
+      if (previewRef.current) {
+        URL.revokeObjectURL(previewRef.current);
+        previewRef.current = null;
+      }
+      setPreview(null);
+    },
+    [profile.id],
+  );
 
   const triggerPick = () => {
     if (uploading) return;
@@ -2201,6 +2220,10 @@ function DetailScanUpload({ profile, onScanUpdate }) {
     if (!file) return;
     setError(null);
     setUploading(true);
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    const localUrl = URL.createObjectURL(file);
+    previewRef.current = localUrl;
+    setPreview(localUrl);
     const objectPath = scanStorageObjectPath(profile.name);
     const contentType =
       file.type === "image/jpeg" || file.type === "image/jpg" ? "image/jpeg" : "image/png";
@@ -2208,9 +2231,19 @@ function DetailScanUpload({ profile, onScanUpdate }) {
       const publicUrl = await uploadProfileStorageObject(objectPath, file, contentType);
       await supabasePatch(profile.id, { scan_url: publicUrl });
       onScanUpdate({ scan_url: publicUrl });
+      // Hand off to the versioned public URL in the same commit, then release
+      // the blob — never revoke a URL that is still the live <img> src.
+      setPreview(null);
+      if (previewRef.current === localUrl) {
+        URL.revokeObjectURL(localUrl);
+        previewRef.current = null;
+      }
     } catch (err) {
       console.error(err);
       setError(err.message || "Upload failed");
+      URL.revokeObjectURL(localUrl);
+      if (previewRef.current === localUrl) previewRef.current = null;
+      setPreview(null);
     } finally {
       setUploading(false);
     }
@@ -2226,7 +2259,9 @@ function DetailScanUpload({ profile, onScanUpdate }) {
     />
   );
 
-  if (profile.scan_url) {
+  const shownScanUrl = preview || profile.scan_url;
+
+  if (shownScanUrl) {
     return (
       <div
         className={`detail-scan-small-wrap${uploading ? " uploading" : ""}`}
@@ -2237,7 +2272,7 @@ function DetailScanUpload({ profile, onScanUpdate }) {
         aria-busy={uploading}
         aria-label="Replace scan image"
       >
-        <img className="detail-scan-small" src={profile.scan_url} alt={profile.name} />
+        <img className="detail-scan-small" src={shownScanUrl} alt={profile.name} />
         {input}
         <div className="detail-scan-replace-overlay">
           {uploading ? "Uploading..." : "Replace"}
@@ -2375,7 +2410,7 @@ function PdfSection({ profile, isAdmin, onSetPrimary, onSetActivePdf }) {
       const alreadySaved = pdfs.some((p) => p.pdf_url === profile.pdf_url);
       if (!alreadySaved) {
         try {
-          const urlParts = profile.pdf_url.split("/");
+          const urlParts = profile.pdf_url.split("?")[0].split("/");
           const rawFilename = decodeURIComponent(urlParts[urlParts.length - 1] || "");
           const label = rawFilename
             ? rawFilename.replace(/\.pdf$/i, "")
