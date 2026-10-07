@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import logo from "./assets/CPW_Apple_DeepGold_Large.png";
 
@@ -2933,9 +2933,18 @@ export default function App() {
     setSelected(null);
   };
 
+  // Remember where the user was in the grid when they opened a profile so that
+  // returning to the catalog drops them back at the same spot.
+  const gridScrollY = useRef(null);
+
+  const openProfile = useCallback((id) => {
+    gridScrollY.current = window.scrollY;
+    setSelected(id);
+    window.scrollTo(0, 0);
+  }, []);
+
   const handleBack = useCallback(() => {
     setSelected(null);
-    window.scrollTo(0, 0);
   }, []);
 
   const handleProfileUpdate = useCallback((profileId, patch) => {
@@ -2995,6 +3004,19 @@ export default function App() {
   }, [profiles]);
 
   const selectedProfile = selected ? profiles.find((p) => p.id === selected) : null;
+  const showingGrid = !selectedProfile;
+
+  // We restore scroll ourselves; stop the browser from fighting us on back/forward.
+  useEffect(() => {
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  }, []);
+
+  // Runs before paint when the grid re-mounts (Back button, Escape, or browser back).
+  useLayoutEffect(() => {
+    if (!showingGrid || gridScrollY.current == null) return;
+    window.scrollTo(0, gridScrollY.current);
+    gridScrollY.current = null;
+  }, [showingGrid]);
 
   // Read direction: resolve the URL hash (e.g. #/profile/042) to a profile so a
   // shared/pasted link — or the browser back/forward buttons — opens that page.
@@ -3373,7 +3395,7 @@ export default function App() {
                     <ProfileCard
                       key={p.id}
                       profile={p}
-                      onClick={() => { setSelected(p.id); window.scrollTo(0, 0); }}
+                      onClick={() => openProfile(p.id)}
                       thumbSize={thumbSize}
                     />
                   ))
