@@ -1,5 +1,9 @@
 # React + Vite
 
+> **Retired 2026-10-26.** This app is now the Profile Catalog (/profiles) tool in CPW Utility
+> (repo `CPW-Utility-Webapps`, https://cpw-utility.vercel.app). `vercel.json`
+> sends every page load here to it. Make changes there, not in this repo.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

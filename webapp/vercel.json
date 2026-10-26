@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "destination": "https://cpw-utility.vercel.app/profiles",
+      "permanent": false
+    }
+  ]
+}
